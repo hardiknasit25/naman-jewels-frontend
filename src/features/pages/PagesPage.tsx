@@ -54,7 +54,7 @@ export function PagesPage() {
     <div className="flex h-full flex-col gap-6 overflow-y-auto">
       <PageHeader
         title="Content Pages"
-        description="Edit Contact, Privacy Policy and Terms with a rich text editor."
+        description="Edit Contact, About Us and Terms with a rich text editor."
       />
 
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
