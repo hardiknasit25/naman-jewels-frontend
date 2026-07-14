@@ -30,6 +30,7 @@ const EMPTY: CustomerFormValues = {
   companyName: '',
   mobileNumber: '',
   email: '',
+  password: '',
   address: '',
   city: '',
   referenceBy: '',
@@ -75,6 +76,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
         companyName: customer.companyName,
         mobileNumber: customer.mobileNumber,
         email: customer.email,
+        // Never prefill the password hash; blank means "keep existing".
+        password: '',
         address: customer.address,
         city: customer.city,
         referenceBy: customer.referenceBy ?? '',
@@ -89,16 +92,20 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
   }, [open, customer, defaultTypeId, reset])
 
   const onSubmit = async (values: CustomerFormValues) => {
+    // Only send a password when one was actually entered; the backend rejects an
+    // empty string (min 6) and a blank field means "keep the existing password".
+    const { password, ...rest } = values
+    const withPassword = password ? { ...rest, password } : rest
     try {
       if (customer) {
         await updateCustomer({
           id: customer.id,
-          patch: { ...values, customerTypeId: Number(typeId), sessionDuration: session },
+          patch: { ...withPassword, customerTypeId: Number(typeId), sessionDuration: session },
         }).unwrap()
         toast.success('Customer updated')
       } else {
         await addCustomer({
-          ...values,
+          ...withPassword,
           customerTypeId: Number(typeId),
           sessionDuration: session,
           status: 'active',
@@ -139,6 +146,21 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
               <Input id="email" type="email" {...register('email')} />
             </Field>
           </div>
+
+          <Field
+            label="Password"
+            htmlFor="password"
+            hint={isEdit ? 'Leave blank to keep the current password' : 'Used for customer app login'}
+            error={errors.password?.message}
+          >
+            <Input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              placeholder={isEdit ? '••••••••' : 'Min 6 characters'}
+              {...register('password')}
+            />
+          </Field>
 
           <Field label="Address" htmlFor="address" error={errors.address?.message}>
             <Input id="address" {...register('address')} />

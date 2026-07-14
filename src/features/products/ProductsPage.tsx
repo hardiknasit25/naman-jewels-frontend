@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, ImageIcon, X } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import {
   useAddProductMutation,
   useDeleteProductMutation,
@@ -58,15 +59,64 @@ function ProductFormDialog({
   const [addProduct, { isLoading: adding }] = useAddProductMutation()
   const [updateProduct, { isLoading: updating }] = useUpdateProductMutation()
   const [categoryId, setCategoryId] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
+  const [images, setImages] = useState<string[]>([])
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
+  const [dragActive, setDragActive] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const onImageChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setImageUrl(reader.result as string)
-    reader.readAsDataURL(file)
+  const openFilePicker = () => fileInputRef.current?.click()
+
+  // Number of empty placeholder slots to always surface so the user can see
+  // where images go. Real previews fill these first; a "+" tile handles the rest.
+  const PLACEHOLDER_SLOTS = 3
+
+  const readFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+  // Encode and append any number of image files (from a picker or a drop). No limit.
+  const addFiles = async (fileList: FileList | File[] | null) => {
+    const files = Array.from(fileList ?? []).filter((f) => f.type.startsWith('image/'))
+    if (files.length === 0) return
+    const encoded = await Promise.all(files.map(readFile))
+    setImages((current) => [...current, ...encoded])
   }
+
+  const onImagesChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    // Materialise the (live) FileList into an array BEFORE resetting the input —
+    // clearing e.target.value empties e.target.files, so reading it afterwards
+    // (inside the async addFiles) would find nothing.
+    const files = Array.from(e.target.files ?? [])
+    // Reset the input so picking the same file again still fires onChange.
+    e.target.value = ''
+    await addFiles(files)
+  }
+
+  const onDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragActive(false)
+    await addFiles(e.dataTransfer.files)
+  }
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (!dragActive) setDragActive(true)
+  }
+
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    // Only clear when leaving the dropzone itself, not its children.
+    if (e.currentTarget === e.target) setDragActive(false)
+  }
+
+  const removeImage = (index: number) =>
+    setImages((current) => current.filter((_, i) => i !== index))
+
+  // How many empty dashed placeholders to render after the existing previews.
+  const emptySlots = Math.max(0, PLACEHOLDER_SLOTS - images.length)
 
   const {
     register,
@@ -91,11 +141,14 @@ function ProductFormDialog({
         notes: record.notes ?? '',
       })
       setCategoryId(String(record.categoryId))
-      setImageUrl(record.imageUrl ?? '')
+      // Prefer the images array; fall back to the legacy single imageUrl.
+      setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
+      setVisibility(record.visibility ?? 'public')
     } else {
       reset({ name: '', sku: '', grossWeight: undefined, netWeight: '', size: '', purity: '', stoneDetails: '', notes: '' })
       setCategoryId(categoryOptions[0]?.value ?? '')
-      setImageUrl('')
+      setImages([])
+      setVisibility('public')
     }
   }, [open, record, reset, categoryOptions])
 
@@ -114,7 +167,10 @@ function ProductFormDialog({
       purity: values.purity,
       stoneDetails: values.stoneDetails,
       notes: values.notes,
-      imageUrl,
+      images,
+      // Keep the primary imageUrl in sync (first image) for list thumbnails / consumers.
+      imageUrl: images[0] ?? '',
+      visibility,
     }
     try {
       if (record) {
@@ -132,43 +188,90 @@ function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{record ? 'Edit Product' : 'Add Product'}</DialogTitle>
           <DialogDescription>Products are shown without a price.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
-          <Field label="Product Image" optional>
-            <div className="flex items-center gap-3">
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="Product preview"
-                  className="size-16 rounded-lg border object-cover"
-                />
-              ) : (
-                <div className="flex size-16 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
-                  <ImageIcon className="size-6" />
-                </div>
+          <Field
+            label="Product Images"
+            optional
+            hint="Drag & drop or click a slot to upload. The first image is used as the main thumbnail."
+          >
+            <div
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              className={cn(
+                'rounded-xl border-2 border-dashed p-3 transition-colors',
+                dragActive ? 'border-primary bg-primary/5' : 'border-border'
               )}
-              <div className="flex flex-col items-start gap-1">
-                <input
-                  id="p-image"
-                  type="file"
-                  accept="image/*"
-                  onChange={onImageChange}
-                  className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:text-secondary-foreground"
-                />
-                {imageUrl && (
+            >
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                {images.map((src, i) => (
+                  <div key={i} className="group relative aspect-square">
+                    <img
+                      src={src}
+                      alt={`Product image ${i + 1}`}
+                      className="h-full w-full rounded-lg border object-cover"
+                    />
+                    {i === 0 && (
+                      <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+                        Main
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="Remove image"
+                      className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow transition-opacity group-hover:opacity-100"
+                      onClick={() => removeImage(i)}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Empty placeholder slots (at least 3) so users see where images go. */}
+                {Array.from({ length: emptySlots }).map((_, i) => (
+                  <button
+                    key={`ph-${i}`}
+                    type="button"
+                    onClick={openFilePicker}
+                    className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-muted/40 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
+                  >
+                    <ImageIcon className="size-7" />
+                    <span className="text-[11px]">Image {images.length + i + 1}</span>
+                  </button>
+                ))}
+
+                {/* Once the placeholders are filled, an unlimited "add more" tile. */}
+                {emptySlots === 0 && (
                   <button
                     type="button"
-                    className="text-xs text-destructive"
-                    onClick={() => setImageUrl('')}
+                    onClick={openFilePicker}
+                    className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed bg-muted/40 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
                   >
-                    Remove image
+                    <Plus className="size-7" />
+                    <span className="text-[11px]">Add more</span>
                   </button>
                 )}
               </div>
+
+              <input
+                ref={fileInputRef}
+                id="p-image"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={onImagesChange}
+                className="sr-only"
+              />
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                {images.length === 0
+                  ? 'Drag & drop images here, or click a slot to browse your device'
+                  : `${images.length} image${images.length === 1 ? '' : 's'} added — drag & drop or use “Add more” to upload as many as you like`}
+              </p>
             </div>
           </Field>
 
@@ -181,9 +284,24 @@ function ProductFormDialog({
             </Field>
           </div>
 
-          <Field label="Category">
-            <SelectField value={categoryId} onValueChange={setCategoryId} options={categoryOptions} placeholder="Select category" />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Category">
+              <SelectField value={categoryId} onValueChange={setCategoryId} options={categoryOptions} placeholder="Select category" />
+            </Field>
+            <Field
+              label="Visibility"
+              hint={visibility === 'private' ? 'Hidden — customers will not see this product' : 'Public — visible to customers'}
+            >
+              <SelectField
+                value={visibility}
+                onValueChange={(v) => setVisibility(v as 'public' | 'private')}
+                options={[
+                  { value: 'public', label: 'Public (visible to customers)' },
+                  { value: 'private', label: 'Private (hidden)' },
+                ]}
+              />
+            </Field>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
@@ -279,6 +397,18 @@ export function ProductsPage() {
         colId: 'category',
         valueGetter: (p) => categoryName(p.data?.categoryId),
         cellRenderer: (p: { value: string }) => <Badge variant="secondary">{p.value}</Badge>,
+      },
+      {
+        headerName: 'Visibility',
+        colId: 'visibility',
+        maxWidth: 130,
+        valueGetter: (p) => p.data?.visibility ?? 'public',
+        cellRenderer: (p: { value: string }) =>
+          p.value === 'private' ? (
+            <Badge variant="outline" className="text-muted-foreground">Private</Badge>
+          ) : (
+            <Badge variant="secondary">Public</Badge>
+          ),
       },
       { headerName: 'Purity', field: 'purity' },
       { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130 },

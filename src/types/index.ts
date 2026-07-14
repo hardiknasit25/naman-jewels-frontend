@@ -40,6 +40,8 @@ export interface Customer extends Timestamped {
   address: string
   city: string
   referenceBy?: string
+  /** Write-only: plaintext password sent on create/update; hashed server-side, never returned. */
+  password?: string
   /** References CustomerType.id. Empty while a registration is pending. */
   customerTypeId: Id | null
   status: CustomerStatus
@@ -52,6 +54,8 @@ export interface Category extends Timestamped {
   /** null = top-level category; otherwise the parent category id (sub-category). */
   parentId: Id | null
   description?: string
+  /** Data URL (uploaded) or remote image URL. Empty when no image. */
+  imageUrl?: string
 }
 
 // 3.5 Product Parameters / Specifications — note: no price/MRP field.
@@ -65,8 +69,12 @@ export interface Product extends Timestamped {
   purity: string
   stoneDetails?: string
   notes?: string
-  /** Data URL (uploaded) or remote image URL. Empty when no image. */
+  /** Primary image (mirrors images[0]). Data URL (uploaded) or remote image URL. */
   imageUrl?: string
+  /** Gallery of images (data URLs or remote URLs). */
+  images?: string[]
+  /** 'public' = visible to customers; 'private' = hidden from the customer app. */
+  visibility?: 'public' | 'private'
 }
 
 // 4.8 App Content Management — home hero banners / images.

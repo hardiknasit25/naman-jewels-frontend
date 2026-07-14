@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -51,6 +51,16 @@ function CategoryFormDialog({
   const [addCategory, { isLoading: adding }] = useAddCategoryMutation()
   const [updateCategory, { isLoading: updating }] = useUpdateCategoryMutation()
   const [parentId, setParentId] = useState<string>(NONE)
+  const [imageUrl, setImageUrl] = useState('')
+
+  const onImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setImageUrl(reader.result as string)
+    reader.readAsDataURL(file)
+  }
 
   const {
     register,
@@ -66,6 +76,7 @@ function CategoryFormDialog({
     if (!open) return
     reset(record ? { name: record.name, description: record.description ?? '' } : { name: '', description: '' })
     setParentId(record?.parentId != null ? String(record.parentId) : NONE)
+    setImageUrl(record?.imageUrl ?? '')
   }, [open, record, reset])
 
   // A category cannot be its own parent.
@@ -77,7 +88,7 @@ function CategoryFormDialog({
   ]
 
   const onSubmit = async (values: FormValues) => {
-    const patch = { ...values, parentId: parentId === NONE ? null : Number(parentId) }
+    const patch = { ...values, parentId: parentId === NONE ? null : Number(parentId), imageUrl }
     try {
       if (record) {
         await updateCategory({ id: record.id, patch }).unwrap()
@@ -99,6 +110,39 @@ function CategoryFormDialog({
           <DialogTitle>{record ? 'Edit Category' : 'Add Category'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
+          <Field label="Category Image" optional>
+            <div className="flex items-center gap-3">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt="Category preview"
+                  className="size-16 rounded-lg border object-cover"
+                />
+              ) : (
+                <div className="flex size-16 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                  <ImageIcon className="size-6" />
+                </div>
+              )}
+              <div className="flex flex-col items-start gap-1">
+                <input
+                  id="cat-image"
+                  type="file"
+                  accept="image/*"
+                  onChange={onImageChange}
+                  className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:text-secondary-foreground"
+                />
+                {imageUrl && (
+                  <button
+                    type="button"
+                    className="text-xs text-destructive"
+                    onClick={() => setImageUrl('')}
+                  >
+                    Remove image
+                  </button>
+                )}
+              </div>
+            </div>
+          </Field>
           <Field label="Name" htmlFor="cat-name" error={errors.name?.message}>
             <Input id="cat-name" {...register('name')} />
           </Field>
@@ -137,6 +181,33 @@ export function CategoriesPage() {
 
   const columns = useMemo<ColDef<Category>[]>(
     () => [
+      {
+        headerName: 'Image',
+        colId: 'image',
+        width: 88,
+        minWidth: 88,
+        maxWidth: 88,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellClass: 'px-2!',
+        headerClass: 'nj-center-header',
+        cellRenderer: (p: { data: Category }) => (
+          <div className="flex h-full w-full items-center justify-center">
+            {p.data.imageUrl ? (
+              <img
+                src={p.data.imageUrl}
+                alt={p.data.name}
+                className="size-12 rounded-xl object-cover shadow-sm ring-1 ring-border"
+              />
+            ) : (
+              <div className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground ring-1 ring-border">
+                <ImageIcon className="size-5" />
+              </div>
+            )}
+          </div>
+        ),
+      },
       { headerName: 'Name', field: 'name', minWidth: 180 },
       {
         headerName: 'Parent',
@@ -200,7 +271,7 @@ export function CategoriesPage() {
         }
       />
 
-      <DataGrid rowData={categories} columnDefs={columns} loading={isLoading} />
+      <DataGrid rowData={categories} columnDefs={columns} loading={isLoading} rowHeight={64} />
 
       <CategoryFormDialog
         open={formOpen}

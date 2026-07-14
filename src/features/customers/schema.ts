@@ -7,6 +7,11 @@ export const customerSchema = z.object({
     .min(7, 'Enter a valid mobile number')
     .regex(/^[0-9+\-\s]+$/, 'Only digits and + - are allowed'),
   email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+  // Optional: leave blank when editing to keep the existing password. Min 6 when set.
+  password: z
+    .string()
+    .optional()
+    .refine((v) => !v || v.length >= 6, 'Password must be at least 6 characters'),
   address: z.string().min(1, 'Address is required'),
   city: z.string().min(1, 'City is required'),
   referenceBy: z.string().optional(),
