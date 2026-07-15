@@ -58,6 +58,9 @@ export interface Category extends Timestamped {
   imageUrl?: string
 }
 
+/** Publish gate for a product (3.5). Independent of the customer tier tags. */
+export type ProductStatus = 'live' | 'private'
+
 // 3.5 Product Parameters / Specifications — note: no price/MRP field.
 export interface Product extends Timestamped {
   name: string
@@ -73,8 +76,14 @@ export interface Product extends Timestamped {
   imageUrl?: string
   /** Gallery of images (data URLs or remote URLs). */
   images?: string[]
-  /** 'public' = visible to customers; 'private' = hidden from the customer app. */
-  visibility?: 'public' | 'private'
+  /** Publish gate: 'live' = shown in the customer app, 'private' = hidden from everyone. */
+  status?: ProductStatus
+  /**
+   * 2.2 CustomerType ids this product is tagged to. Visibility is cumulative — a
+   * customer also sees products tagged to any tier below their own — so tagging
+   * the lowest tier reaches every customer. Empty/undefined = visible to all tiers.
+   */
+  customerTypeIds?: Id[]
 }
 
 // 4.8 App Content Management — home hero banners / images.
