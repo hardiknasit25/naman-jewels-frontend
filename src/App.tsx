@@ -1,18 +1,18 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { DashboardLayout } from '@/components/layout/DashboardLayout'
-import { RequireAuth } from '@/features/auth/RequireAuth'
-import { LoginPage } from '@/features/auth/LoginPage'
-import { DashboardPage } from '@/features/dashboard/DashboardPage'
-import { ProductsPage } from '@/features/products/ProductsPage'
-import { CategoriesPage } from '@/features/categories/CategoriesPage'
-import { CustomersPage } from '@/features/customers/CustomersPage'
-import { CustomerTypesPage } from '@/features/customers/CustomerTypesPage'
-import { InquiriesPage } from '@/features/inquiries/InquiriesPage'
-import { BannersPage } from '@/features/banners/BannersPage'
-import { PagesPage } from '@/features/pages/PagesPage'
-import { SessionLogsPage } from '@/features/logs/SessionLogsPage'
-import { AuditLogsPage } from '@/features/logs/AuditLogsPage'
-import { ProfilePage } from '@/pages/ProfilePage'
+import { Navigate, Route, Routes } from "react-router-dom";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { RequireAuth } from "@/features/auth/RequireAuth";
+import { LoginPage } from "@/features/auth/LoginPage";
+import { DashboardPage } from "@/features/dashboard/DashboardPage";
+import { ProductsPage } from "@/features/products/ProductsPage";
+import { CategoriesPage } from "@/features/categories/CategoriesPage";
+import { CustomersPage } from "@/features/customers/CustomersPage";
+import { CustomerTypesPage } from "@/features/customers/CustomerTypesPage";
+import { InquiriesPage } from "@/features/inquiries/InquiriesPage";
+import { BannersPage } from "@/features/banners/BannersPage";
+import { PagesPage } from "@/features/pages/PagesPage";
+import { SessionLogsPage } from "@/features/logs/SessionLogsPage";
+// import { AuditLogsPage } from '@/features/logs/AuditLogsPage'
+import { ProfilePage } from "@/pages/ProfilePage";
 
 function App() {
   return (
@@ -42,7 +42,7 @@ function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
-  )
+  );
 }
 
-export default App
+export default App;
