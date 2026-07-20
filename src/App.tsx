@@ -37,7 +37,7 @@ function App() {
         <Route path="banners" element={<BannersPage />} />
         <Route path="pages" element={<PagesPage />} />
         <Route path="session-logs" element={<SessionLogsPage />} />
-        <Route path="audit-logs" element={<AuditLogsPage />} />
+        {/* <Route path="audit-logs" element={<AuditLogsPage />} /> */}
         <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
