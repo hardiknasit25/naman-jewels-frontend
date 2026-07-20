@@ -8,8 +8,8 @@ import {
   GalleryHorizontalEnd,
   FileText,
   CircleUser,
-  History,
-  ScrollText,
+  // History,
+  // ScrollText,
   type LucideIcon,
 } from "lucide-react";
 
