@@ -10,7 +10,7 @@ import { CustomerTypesPage } from "@/features/customers/CustomerTypesPage";
 import { InquiriesPage } from "@/features/inquiries/InquiriesPage";
 import { BannersPage } from "@/features/banners/BannersPage";
 import { PagesPage } from "@/features/pages/PagesPage";
-import { SessionLogsPage } from "@/features/logs/SessionLogsPage";
+// import { SessionLogsPage } from "@/features/logs/SessionLogsPage";
 // import { AuditLogsPage } from '@/features/logs/AuditLogsPage'
 import { ProfilePage } from "@/pages/ProfilePage";
 
@@ -36,7 +36,7 @@ function App() {
         <Route path="inquiries" element={<InquiriesPage />} />
         <Route path="banners" element={<BannersPage />} />
         <Route path="pages" element={<PagesPage />} />
-        <Route path="session-logs" element={<SessionLogsPage />} />
+        {/* <Route path="session-logs" element={<SessionLogsPage />} /> */}
         {/* <Route path="audit-logs" element={<AuditLogsPage />} /> */}
         <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
