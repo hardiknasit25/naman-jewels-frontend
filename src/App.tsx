@@ -4,6 +4,7 @@ import { RequireAuth } from "@/features/auth/RequireAuth";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { ProductsPage } from "@/features/products/ProductsPage";
+import { ProductFormPage } from "@/features/products/ProductFormPage";
 import { CategoriesPage } from "@/features/categories/CategoriesPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
 import { CustomerTypesPage } from "@/features/customers/CustomerTypesPage";
@@ -30,6 +31,8 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="products" element={<ProductsPage />} />
+        <Route path="products/new" element={<ProductFormPage />} />
+        <Route path="products/:id/edit" element={<ProductFormPage />} />
         <Route path="category" element={<CategoriesPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customer-types" element={<CustomerTypesPage />} />

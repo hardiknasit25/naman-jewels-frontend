@@ -36,7 +36,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto">
+    <div className="scrollbar-tw flex h-full flex-col gap-6 overflow-y-auto">
       <PageHeader title="Profile" description="Manage your admin account details." />
 
       <Card className="max-w-xl">

@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/sheet'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { useAuth } from '@/features/auth/AuthContext'
+import mark from '@/assets/naman_jewels_mark.png'
 
 const activeClasses = 'bg-primary text-primary-foreground hover:bg-primary/90'
 
@@ -47,9 +48,11 @@ function DesktopSidebar() {
 
   return (
     <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r bg-sidebar py-4 md:flex">
-      <div className="mb-4 flex size-9 items-center justify-center rounded-xl bg-primary font-heading text-sm font-semibold text-primary-foreground">
-        NJ
-      </div>
+      <img
+        src={mark}
+        alt="Naman Jewels"
+        className="mb-4 size-9 object-contain"
+      />
       <nav className="flex flex-col items-center gap-1">
         {navItems.map((item) => (
           <RailItem key={item.path} item={item} isActive={pathname.startsWith(item.path)} />
@@ -166,7 +169,10 @@ export function DashboardLayout() {
           >
             <Menu className="size-5" />
           </Button>
-          <span className="font-heading text-sm font-semibold">Naman Jewels</span>
+          <span className="flex items-center gap-2 font-heading text-sm font-semibold">
+            <img src={mark} alt="" className="size-6 object-contain" />
+            Naman Jewels
+          </span>
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent side="left" className="flex w-64 flex-col gap-4 p-0 pt-6">

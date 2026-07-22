@@ -124,7 +124,7 @@ export function DashboardPage() {
   )
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto">
+    <div className="scrollbar-tw flex h-full flex-col gap-6 overflow-y-auto">
       <PageHeader title="Dashboard" description="Overview of inquiries, products and customers." />
 
       {/* KPIs */}

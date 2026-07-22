@@ -111,7 +111,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
         data-placeholder={placeholder}
         onInput={emit}
         onBlur={emit}
-        className="rich-content max-h-[45vh] min-h-40 overflow-y-auto px-4 py-3"
+        className="scrollbar-tw rich-content max-h-[45vh] min-h-40 overflow-y-auto px-4 py-3"
       />
     </div>
   )

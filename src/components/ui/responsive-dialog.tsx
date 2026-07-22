@@ -35,7 +35,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           isMobile
-            ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[92vh] flex-col gap-4 overflow-y-auto rounded-t-3xl bg-popover px-5 pt-3 pb-8 text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 transition-transform duration-300 ease-out outline-none data-ending-style:translate-y-full data-starting-style:translate-y-full dark:ring-foreground/10'
+            ? 'scrollbar-tw fixed inset-x-0 bottom-0 z-50 flex max-h-[92vh] flex-col gap-4 overflow-y-auto rounded-t-3xl bg-popover px-5 pt-3 pb-8 text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 transition-transform duration-300 ease-out outline-none data-ending-style:translate-y-full data-starting-style:translate-y-full dark:ring-foreground/10'
             : 'fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-[min(var(--radius-4xl),24px)] bg-popover p-6 text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
           className
         )}

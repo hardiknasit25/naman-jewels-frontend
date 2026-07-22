@@ -6,6 +6,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Themed, thin scrollbar used on every scrollable container in the admin panel. */
+@utility scrollbar-tw {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
 html,
 body,
 #root {
@@ -139,6 +165,31 @@ body,
 /* Center the header label for action / image columns in AG Grid. */
 .nj-center-header .ag-header-cell-label {
   justify-content: center;
+}
+
+/* Themed scrollbars for AG Grid's internal scroll viewports. */
+.ag-root-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ag-root-wrapper ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ag-root-wrapper ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ag-root-wrapper ::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.ag-root-wrapper ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+.ag-root-wrapper ::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Categorical chart palette (validated for CVD + contrast, light & dark). */

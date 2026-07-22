@@ -51,7 +51,7 @@ export function PagesPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto">
+    <div className="scrollbar-tw flex h-full flex-col gap-6 overflow-y-auto">
       <PageHeader
         title="Content Pages"
         description="Edit Contact, About Us and Terms with a rich text editor."
@@ -59,7 +59,7 @@ export function PagesPage() {
 
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
         {/* Page selector */}
-        <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+        <nav className="scrollbar-tw flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
           {pages.map((p) => (
             <button
               key={p.id}
@@ -117,7 +117,7 @@ export function PagesPage() {
 
       {/* Preview */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="scrollbar-tw max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Preview — {selected?.title}</DialogTitle>
           </DialogHeader>
