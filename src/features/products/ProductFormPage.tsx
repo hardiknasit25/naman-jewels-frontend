@@ -311,9 +311,9 @@ export function ProductFormPage() {
         {/* Full-width single column inside the right (laptop) section; multi-column
             only when the section is stacked full-bleed on tablet / mobile.
             On laptops it fills the remaining height and scrolls when overflowing. */}
-        <div className="scrollbar-tw grid grid-cols-3 gap-3 sm:grid-cols-4 lg:min-h-0 lg:flex-1 lg:grid-cols-1 lg:justify-items-center lg:overflow-y-auto lg:pr-1">
+        <div className="scrollbar-tw flex flex-wrap gap-3 lg:min-h-0 lg:flex-1 lg:content-start lg:overflow-y-auto lg:pr-1">
           {images.map((src, i) => (
-            <div key={i} className="group relative aspect-square w-full max-w-48">
+            <div key={i} className="group relative aspect-square w-24">
               <img
                 src={src}
                 alt={`Product image ${i + 1}`}
@@ -342,12 +342,10 @@ export function ProductFormPage() {
               key={`ph-${i}`}
               type="button"
               onClick={openFilePicker}
-              className="flex aspect-square w-full max-w-48 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-muted/40 px-2 text-center text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
+              aria-label="Add image"
+              className="flex aspect-square w-24 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-muted/40 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
             >
               <ImageIcon className="size-5" />
-              <span className="text-[10px] leading-tight">
-                Drag &amp; drop images here, or click a slot to browse your device
-              </span>
             </button>
           ))}
 
@@ -356,12 +354,10 @@ export function ProductFormPage() {
             <button
               type="button"
               onClick={openFilePicker}
-              className="flex aspect-square w-full max-w-48 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-muted/40 px-2 text-center text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
+              aria-label="Add more images"
+              className="flex aspect-square w-24 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-muted/40 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted"
             >
               <Plus className="size-5" />
-              <span className="text-[10px] leading-tight">
-                Drag &amp; drop images here, or click a slot to browse your device
-              </span>
             </button>
           )}
         </div>
@@ -421,11 +417,11 @@ export function ProductFormPage() {
         </div>
       </div>
 
-      {/* Two-column on laptops: details on the left, images pinned to the right.
-          Stacks (images on top) on tablet / mobile. */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start xl:grid-cols-[minmax(0,1fr)_420px]">
+      {/* Flex row on laptops: details fill the left, images are a fixed-width block
+          pinned to the right. Stacks (images on top) on tablet / mobile. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
           {/* Details */}
-          <div className="order-2 grid gap-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-1 lg:min-h-[calc(100vh-2rem)] lg:content-start">
+          <div className="order-2 grid gap-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-1 lg:min-h-[calc(100vh-2rem)] lg:min-w-0 lg:flex-1 lg:content-start">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Product Name" htmlFor="p-name" error={errors.name?.message}>
                 <Input id="p-name" {...register('name')} />
@@ -533,9 +529,9 @@ export function ProductFormPage() {
             </Field>
           </div>
 
-          {/* Images — right column on laptops, sticky so it stays in view while
-              scrolling the details. */}
-          <div className="order-1 flex flex-col rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          {/* Images — fixed-width block on the right on laptops, sticky so it stays
+              in view while scrolling the details. */}
+          <div className="order-1 flex w-full flex-col rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-2 lg:w-90 lg:shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] xl:w-105">
             {imageSection}
           </div>
         </div>
