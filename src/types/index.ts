@@ -46,6 +46,8 @@ export interface Customer extends Timestamped {
   customerTypeId: Id | null
   status: CustomerStatus
   lastLogin: string | null
+  /** Set by "Force Logout": tokens issued before this instant are rejected. */
+  sessionInvalidatedAt?: string | null
   sessionDuration: SessionDuration
 }
 

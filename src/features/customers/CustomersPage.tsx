@@ -68,7 +68,13 @@ export function CustomersPage() {
   }
 
   const forceLogout = async (c: Customer) => {
-    await updateCustomer({ id: c.id, patch: { lastLogin: null } }).unwrap()
+    // Stamp the invalidation time so the backend kills every token issued before
+    // now — the customer is signed out on their next request. lastLogin is cleared
+    // too so the table reflects that they're no longer signed in.
+    await updateCustomer({
+      id: c.id,
+      patch: { sessionInvalidatedAt: new Date().toISOString(), lastLogin: null },
+    }).unwrap()
     toast.success(`Session ended for ${c.companyName}`)
   }
 
