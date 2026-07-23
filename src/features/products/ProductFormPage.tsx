@@ -386,7 +386,7 @@ export function ProductFormPage() {
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto lg:overflow-visible"
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto"
     >
       {/* Header: back icon + title on the left, Cancel / Save actions on the right. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
