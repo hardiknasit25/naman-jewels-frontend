@@ -116,6 +116,15 @@ export function ProductFormPage() {
   const [images, setImages] = useState<string[]>([])
   const [status, setStatus] = useState<ProductStatus>('live')
   const [customerTypeIds, setCustomerTypeIds] = useState<Id[]>([])
+  // Itemized "less weight" breakdown. Weight kept as a string while editing so the
+  // input can be empty / mid-typed; converted to a number on submit.
+  const [lessFactors, setLessFactors] = useState<{ label: string; weight: string }[]>([])
+
+  const addFactor = () => setLessFactors((rows) => [...rows, { label: '', weight: '' }])
+  const updateFactor = (index: number, key: 'label' | 'weight', value: string) =>
+    setLessFactors((rows) => rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)))
+  const removeFactor = (index: number) =>
+    setLessFactors((rows) => rows.filter((_, i) => i !== index))
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -201,6 +210,7 @@ export function ProductFormPage() {
       setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
       setStatus(record.status ?? 'live')
       setCustomerTypeIds(record.customerTypeIds ?? [])
+      setLessFactors((record.lessFactors ?? []).map((r) => ({ label: r.label, weight: String(r.weight) })))
     } else {
       reset({ name: '', sku: '', grossWeight: undefined, netWeight: '', size: '', purity: '', stoneDetails: '', notes: '' })
       setCategoryId(categoryOptions[0]?.value ?? '')
@@ -208,6 +218,7 @@ export function ProductFormPage() {
       setStatus('live')
       // No tags = visible to every tier, which matches the "Public" default.
       setCustomerTypeIds([])
+      setLessFactors([])
     }
   }, [isEdit, record, reset, categoryOptions])
 
@@ -238,6 +249,10 @@ export function ProductFormPage() {
       categoryId: Number(categoryId),
       grossWeight: values.grossWeight,
       netWeight: values.netWeight ? Number(values.netWeight) : null,
+      // Keep only complete rows (a label and a valid number), stored as numbers.
+      lessFactors: lessFactors
+        .map((r) => ({ label: r.label.trim(), weight: Number(r.weight) }))
+        .filter((r) => r.label.length > 0 && Number.isFinite(r.weight)),
       size: values.size,
       purity: values.purity,
       stoneDetails: values.stoneDetails,
@@ -459,6 +474,47 @@ export function ProductFormPage() {
                 <Input id="p-nw" type="number" step="0.01" {...register('netWeight')} />
               </Field>
             </div>
+
+            <Field
+              label="Less Weight Factors"
+              optional
+              hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). Shown on the product page; does not change Gross/Net."
+            >
+              <div className="grid gap-2">
+                {lessFactors.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Factor (e.g. Stone)"
+                      value={row.label}
+                      onChange={(e) => updateFactor(i, 'label', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="number"
+                      step="0.001"
+                      placeholder="Weight (gm)"
+                      value={row.weight}
+                      onChange={(e) => updateFactor(i, 'weight', e.target.value)}
+                      className="w-32"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Remove factor"
+                      onClick={() => removeFactor(i)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button type="button" variant="outline" size="sm" onClick={addFactor}>
+                    <Plus className="size-4" /> Add factor
+                  </Button>
+                </div>
+              </div>
+            </Field>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Size" htmlFor="p-size" optional hint="Ring size / chain length / diameter">

@@ -63,6 +63,12 @@ export interface Category extends Timestamped {
 /** Publish gate for a product (3.5). Independent of the customer tier tags. */
 export type ProductStatus = 'live' | 'private'
 
+/** One itemized row of the "less" (deducted) weight breakdown. */
+export interface LessFactor {
+  label: string
+  weight: number
+}
+
 // 3.5 Product Parameters / Specifications — note: no price/MRP field.
 export interface Product extends Timestamped {
   name: string
@@ -70,6 +76,8 @@ export interface Product extends Timestamped {
   categoryId: Id
   grossWeight: number
   netWeight?: number | null
+  /** Optional itemized breakdown of the deducted (less) weight. Display-only. */
+  lessFactors?: LessFactor[] | null
   size?: string
   purity: string
   stoneDetails?: string
