@@ -60,6 +60,21 @@ export interface Category extends Timestamped {
   imageUrl?: string
 }
 
+/**
+ * Carat master — the configurable purity list (24K, 22K, 916, …) products are
+ * tagged with. Replaces the old free-text `purity` field on Product.
+ */
+export interface Carat extends Timestamped {
+  name: string
+  /** Optional fineness / hallmark that goes with the carat, e.g. "916". */
+  purity?: string
+  /** Lower number shows first in dropdowns and the master grid. */
+  order: number
+  description?: string
+  /** Inactive carats stay on existing products but drop out of the picker. */
+  active: boolean
+}
+
 /** Publish gate for a product (3.5). Independent of the customer tier tags. */
 export type ProductStatus = 'live' | 'private'
 
@@ -79,7 +94,13 @@ export interface Product extends Timestamped {
   /** Optional itemized breakdown of the deducted (less) weight. Display-only. */
   lessFactors?: LessFactor[] | null
   size?: string
-  purity: string
+  /** References Carat.id — the source of truth for the product's purity. */
+  caratId: Id
+  /**
+   * Legacy free-text purity ("22K Gold"). Kept in sync server-side from the
+   * selected carat; read-only as far as the admin panel is concerned.
+   */
+  purity?: string
   stoneDetails?: string
   notes?: string
   /** Primary image (mirrors images[0]). Data URL (uploaded) or remote image URL. */

@@ -22,6 +22,7 @@ const PATHS: Record<string, string> = {
   customerTypes: 'customer-types',
   customers: 'customers',
   categories: 'categories',
+  carats: 'carats',
   products: 'products',
   inquiries: 'inquiries',
   banners: 'banners',

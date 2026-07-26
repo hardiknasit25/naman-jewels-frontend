@@ -2,6 +2,7 @@ import { createApi, fakeBaseQuery } from '@reduxjs/toolkit/query/react'
 import {
   auditLogsRepo,
   bannersRepo,
+  caratsRepo,
   categoriesRepo,
   customerTypesRepo,
   customersRepo,
@@ -13,6 +14,7 @@ import {
 import type {
   AuditLog,
   Banner,
+  Carat,
   Category,
   Customer,
   CustomerType,
@@ -39,6 +41,7 @@ export const api = createApi({
     'Customer',
     'CustomerType',
     'Category',
+    'Carat',
     'Product',
     'Inquiry',
     'Banner',
@@ -99,6 +102,26 @@ export const api = createApi({
     deleteCategory: build.mutation<{ id: Id }, Id>({
       queryFn: (id) => run(() => categoriesRepo.remove(id)),
       invalidatesTags: ['Category'],
+    }),
+
+    // ----- Carats (purity master) -----------------------------------------
+    listCarats: build.query<Carat[], void>({
+      queryFn: () => run(() => caratsRepo.list()),
+      providesTags: ['Carat'],
+    }),
+    addCarat: build.mutation<Carat, Omit<Carat, 'id' | 'createdAt'>>({
+      queryFn: (body) => run(() => caratsRepo.create(body)),
+      invalidatesTags: ['Carat'],
+    }),
+    // Renaming or removing a carat changes what the product grid displays, so
+    // refresh products too — their purity is derived from the carat, not stored.
+    updateCarat: build.mutation<Carat, { id: Id; patch: Partial<Carat> }>({
+      queryFn: ({ id, patch }) => run(() => caratsRepo.update(id, patch)),
+      invalidatesTags: ['Carat', 'Product'],
+    }),
+    deleteCarat: build.mutation<{ id: Id }, Id>({
+      queryFn: (id) => run(() => caratsRepo.remove(id)),
+      invalidatesTags: ['Carat', 'Product'],
     }),
 
     // ----- Products (3.5) -------------------------------------------------
@@ -190,6 +213,10 @@ export const {
   useAddCategoryMutation,
   useUpdateCategoryMutation,
   useDeleteCategoryMutation,
+  useListCaratsQuery,
+  useAddCaratMutation,
+  useUpdateCaratMutation,
+  useDeleteCaratMutation,
   useListProductsQuery,
   useAddProductMutation,
   useUpdateProductMutation,

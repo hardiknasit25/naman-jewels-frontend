@@ -11,6 +11,7 @@ import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Field } from '@/components/shared/Field'
 import { SelectField } from '@/components/shared/SelectField'
+import { ImageCropperDialog } from '@/components/shared/ImageCropperDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { formatDate } from '@/lib/format'
+import { fileToDataUrl } from '@/lib/cropImage'
 import {
   useAddCategoryMutation,
   useDeleteCategoryMutation,
@@ -52,14 +54,15 @@ function CategoryFormDialog({
   const [updateCategory, { isLoading: updating }] = useUpdateCategoryMutation()
   const [parentId, setParentId] = useState<string>(NONE)
   const [imageUrl, setImageUrl] = useState('')
+  // Non-empty while the picked image is being cropped; nothing is stored until
+  // the crop is confirmed.
+  const [cropQueue, setCropQueue] = useState<string[]>([])
 
-  const onImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const onImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setImageUrl(reader.result as string)
-    reader.readAsDataURL(file)
+    setCropQueue([await fileToDataUrl(file)])
   }
 
   const {
@@ -77,6 +80,7 @@ function CategoryFormDialog({
     reset(record ? { name: record.name, description: record.description ?? '' } : { name: '', description: '' })
     setParentId(record?.parentId != null ? String(record.parentId) : NONE)
     setImageUrl(record?.imageUrl ?? '')
+    setCropQueue([])
   }, [open, record, reset])
 
   // A category cannot be its own parent.
@@ -131,15 +135,26 @@ function CategoryFormDialog({
                   onChange={onImageChange}
                   className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:text-secondary-foreground"
                 />
-                {imageUrl && (
-                  <button
-                    type="button"
-                    className="text-xs text-destructive"
-                    onClick={() => setImageUrl('')}
-                  >
-                    Remove image
-                  </button>
-                )}
+                <div className="flex gap-3">
+                  {imageUrl && (
+                    <>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setCropQueue([imageUrl])}
+                      >
+                        Re-crop
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-destructive"
+                        onClick={() => setImageUrl('')}
+                      >
+                        Remove image
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </Field>
@@ -161,6 +176,17 @@ function CategoryFormDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        <ImageCropperDialog
+          sources={cropQueue}
+          aspect={1}
+          onComplete={(images) => {
+            setImageUrl(images[0] ?? '')
+            setCropQueue([])
+          }}
+          onCancel={() => setCropQueue([])}
+          title="Crop category image"
+        />
       </DialogContent>
     </Dialog>
   )

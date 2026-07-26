@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Field } from '@/components/shared/Field'
+import { ImageCropperDialog } from '@/components/shared/ImageCropperDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { formatDate } from '@/lib/format'
+import { fileToDataUrl } from '@/lib/cropImage'
 import {
   useAddBannerMutation,
   useDeleteBannerMutation,
@@ -52,6 +54,8 @@ function BannerFormDialog({
   const [updateBanner, { isLoading: updating }] = useUpdateBannerMutation()
   const [imageUrl, setImageUrl] = useState('')
   const [active, setActive] = useState(true)
+  // Non-empty while the picked image is being cropped to the 16:9 hero ratio.
+  const [cropQueue, setCropQueue] = useState<string[]>([])
 
   const {
     register,
@@ -74,14 +78,15 @@ function BannerFormDialog({
       setImageUrl('')
       setActive(true)
     }
+    setCropQueue([])
   }, [open, record, reset])
 
-  const onImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const onImageChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // Reset so re-picking the same file still fires onChange.
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setImageUrl(reader.result as string)
-    reader.readAsDataURL(file)
+    setCropQueue([await fileToDataUrl(file)])
   }
 
   const onSubmit = async (values: FormValues) => {
@@ -127,6 +132,15 @@ function BannerFormDialog({
                 onChange={onImageChange}
                 className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:text-secondary-foreground"
               />
+              {imageUrl && (
+                <button
+                  type="button"
+                  className="self-start text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setCropQueue([imageUrl])}
+                >
+                  Re-crop
+                </button>
+              )}
             </div>
           </Field>
 
@@ -157,6 +171,19 @@ function BannerFormDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        <ImageCropperDialog
+          sources={cropQueue}
+          aspect={16 / 9}
+          maxSize={1600}
+          onComplete={(images) => {
+            setImageUrl(images[0] ?? '')
+            setCropQueue([])
+          }}
+          onCancel={() => setCropQueue([])}
+          title="Crop banner image"
+          description="Banners are cropped to 16:9. Drag to reposition, scroll or use the slider to zoom."
+        />
       </DialogContent>
     </Dialog>
   )

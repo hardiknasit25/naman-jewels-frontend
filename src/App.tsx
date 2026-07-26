@@ -6,6 +6,7 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { ProductsPage } from "@/features/products/ProductsPage";
 import { ProductFormPage } from "@/features/products/ProductFormPage";
 import { CategoriesPage } from "@/features/categories/CategoriesPage";
+import { CaratsPage } from "@/features/carats/CaratsPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
 import { CustomerTypesPage } from "@/features/customers/CustomerTypesPage";
 import { InquiriesPage } from "@/features/inquiries/InquiriesPage";
@@ -34,6 +35,7 @@ function App() {
         <Route path="products/new" element={<ProductFormPage />} />
         <Route path="products/:id/edit" element={<ProductFormPage />} />
         <Route path="category" element={<CategoriesPage />} />
+        <Route path="carats" element={<CaratsPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="customer-types" element={<CustomerTypesPage />} />
         <Route path="inquiries" element={<InquiriesPage />} />

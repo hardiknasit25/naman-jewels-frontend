@@ -4,16 +4,19 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Plus, ImageIcon, X } from 'lucide-react'
+import { ArrowLeft, Plus, ImageIcon, X, Crop as CropIcon } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Field } from '@/components/shared/Field'
 import { SelectField } from '@/components/shared/SelectField'
+import { ImageCropperDialog } from '@/components/shared/ImageCropperDialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { fileToDataUrl } from '@/lib/cropImage'
 import {
   useAddProductMutation,
+  useListCaratsQuery,
   useListCategoriesQuery,
   useListCustomerTypesQuery,
   useListProductsQuery,
@@ -28,11 +31,16 @@ const schema = z.object({
   grossWeight: z.number({ message: 'Enter a valid weight in grams' }).positive('Enter a valid weight in grams'),
   netWeight: z.string().optional(),
   size: z.string().optional(),
-  purity: z.string().min(1, 'Purity / metal is required'),
   stoneDetails: z.string().optional(),
   notes: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
+
+/** Product images are cropped square so the customer app's grid stays even. */
+const PRODUCT_ASPECT = 1
+
+/** Round to milligrams — floating point sums of 0.001-precision inputs drift. */
+const round3 = (n: number) => Math.round(n * 1000) / 1000
 
 /**
  * 2.2 Tier tagging — toggle a product into one or more customer types. Rendered as
@@ -97,11 +105,22 @@ export function ProductFormPage() {
   const { data: products, isLoading: productsLoading } = useListProductsQuery()
   const { data: categories } = useListCategoriesQuery()
   const { data: customerTypes } = useListCustomerTypesQuery()
+  const { data: carats } = useListCaratsQuery()
 
   const tiers = useMemo(() => customerTypes ?? [], [customerTypes])
   const categoryOptions = useMemo(
     () => (categories ?? []).map((c) => ({ value: String(c.id), label: c.name })),
     [categories]
+  )
+
+  // Only active carats are offered for new products (see the Carats master).
+  const activeCaratOptions = useMemo(
+    () =>
+      [...(carats ?? [])]
+        .sort((a, b) => a.order - b.order)
+        .filter((c) => c.active)
+        .map((c) => ({ value: String(c.id), label: c.purity ? `${c.name} (${c.purity})` : c.name })),
+    [carats]
   )
 
   const isEdit = id != null
@@ -113,6 +132,7 @@ export function ProductFormPage() {
   const [addProduct, { isLoading: adding }] = useAddProductMutation()
   const [updateProduct, { isLoading: updating }] = useUpdateProductMutation()
   const [categoryId, setCategoryId] = useState('')
+  const [caratId, setCaratId] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [status, setStatus] = useState<ProductStatus>('live')
   const [customerTypeIds, setCustomerTypeIds] = useState<Id[]>([])
@@ -126,6 +146,12 @@ export function ProductFormPage() {
   const removeFactor = (index: number) =>
     setLessFactors((rows) => rows.filter((_, i) => i !== index))
   const [dragActive, setDragActive] = useState(false)
+  // Images waiting to go through the cropper. Non-empty opens the crop dialog,
+  // which walks them one at a time before anything reaches `images`.
+  const [cropQueue, setCropQueue] = useState<string[]>([])
+  // Set when re-cropping an image already in the gallery — the result replaces
+  // that slot instead of being appended.
+  const [recropIndex, setRecropIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const openFilePicker = () => fileInputRef.current?.click()
@@ -134,20 +160,35 @@ export function ProductFormPage() {
   // where images go. Real previews fill these first; a "+" tile handles the rest.
   const PLACEHOLDER_SLOTS = 3
 
-  const readFile = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-
-  // Encode and append any number of image files (from a picker or a drop). No limit.
+  // Queue any number of image files (from a picker or a drop) for cropping. No
+  // limit. Nothing is added to the gallery until the crop dialog is confirmed.
   const addFiles = async (fileList: FileList | File[] | null) => {
     const files = Array.from(fileList ?? []).filter((f) => f.type.startsWith('image/'))
     if (files.length === 0) return
-    const encoded = await Promise.all(files.map(readFile))
-    setImages((current) => [...current, ...encoded])
+    const encoded = await Promise.all(files.map(fileToDataUrl))
+    setRecropIndex(null)
+    setCropQueue(encoded)
+  }
+
+  // Re-open the cropper for an image that's already in the gallery.
+  const recropImage = (index: number) => {
+    setRecropIndex(index)
+    setCropQueue([images[index]])
+  }
+
+  const onCropDone = (cropped: string[]) => {
+    setImages((current) =>
+      recropIndex != null
+        ? current.map((src, i) => (i === recropIndex ? cropped[0] ?? src : src))
+        : [...current, ...cropped]
+    )
+    setRecropIndex(null)
+    setCropQueue([])
+  }
+
+  const onCropCancel = () => {
+    setRecropIndex(null)
+    setCropQueue([])
   }
 
   const onImagesChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -186,10 +227,53 @@ export function ProductFormPage() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
+
+  // ----- Net weight ---------------------------------------------------------
+  // Net = Gross − the itemized less factors, recalculated as either side changes.
+  // The field stays editable: the admin can type a measured net weight, which
+  // sticks (and can be handed back to the formula via "Use calculated").
+  const [netOverridden, setNetOverridden] = useState(false)
+  const grossWeight = watch('grossWeight')
+  const netWeight = watch('netWeight')
+
+  const lessTotal = useMemo(
+    () =>
+      round3(
+        lessFactors.reduce((sum, row) => {
+          const weight = Number(row.weight)
+          return Number.isFinite(weight) ? sum + weight : sum
+        }, 0)
+      ),
+    [lessFactors]
+  )
+
+  const autoNet = useMemo(() => {
+    if (grossWeight == null || !Number.isFinite(grossWeight)) return null
+    return round3(grossWeight - lessTotal)
+  }, [grossWeight, lessTotal])
+
+  // Keep the field in step with the formula until the admin takes it over.
+  useEffect(() => {
+    if (netOverridden) return
+    setValue('netWeight', autoNet != null ? String(autoNet) : '')
+  }, [autoNet, netOverridden, setValue])
+
+  const useCalculatedNet = () => {
+    setNetOverridden(false)
+    setValue('netWeight', autoNet != null ? String(autoNet) : '')
+  }
+
+  // The less factors can't add up to more than the piece weighs.
+  const netError =
+    autoNet != null && autoNet < 0
+      ? `Less factors total ${lessTotal} gm, which is more than the gross weight.`
+      : undefined
 
   // Hydrate the form once the record (edit) or category list (create) is ready.
   useEffect(() => {
@@ -201,26 +285,47 @@ export function ProductFormPage() {
         grossWeight: record.grossWeight,
         netWeight: record.netWeight != null ? String(record.netWeight) : '',
         size: record.size ?? '',
-        purity: record.purity,
         stoneDetails: record.stoneDetails ?? '',
         notes: record.notes ?? '',
       })
       setCategoryId(String(record.categoryId))
+      setCaratId(record.caratId != null ? String(record.caratId) : '')
       // Prefer the images array; fall back to the legacy single imageUrl.
       setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
       setStatus(record.status ?? 'live')
       setCustomerTypeIds(record.customerTypeIds ?? [])
       setLessFactors((record.lessFactors ?? []).map((r) => ({ label: r.label, weight: String(r.weight) })))
+      // A stored net that doesn't match Gross − Less was entered by hand; keep it
+      // that way instead of silently recalculating it out from under the admin.
+      const storedLess = round3(
+        (record.lessFactors ?? []).reduce((sum, r) => sum + (Number(r.weight) || 0), 0)
+      )
+      const calculated = round3(record.grossWeight - storedLess)
+      setNetOverridden(
+        record.netWeight != null && Math.abs(record.netWeight - calculated) > 0.0005
+      )
     } else {
-      reset({ name: '', sku: '', grossWeight: undefined, netWeight: '', size: '', purity: '', stoneDetails: '', notes: '' })
+      reset({ name: '', sku: '', grossWeight: undefined, netWeight: '', size: '', stoneDetails: '', notes: '' })
       setCategoryId(categoryOptions[0]?.value ?? '')
+      setCaratId(activeCaratOptions[0]?.value ?? '')
       setImages([])
       setStatus('live')
       // No tags = visible to every tier, which matches the "Public" default.
       setCustomerTypeIds([])
       setLessFactors([])
+      setNetOverridden(false)
     }
-  }, [isEdit, record, reset, categoryOptions])
+  }, [isEdit, record, reset, categoryOptions, activeCaratOptions])
+
+  // A product may still point at a carat that has since been deactivated. Keep it
+  // in the list (flagged) so opening the form doesn't silently change its purity.
+  const caratOptions = useMemo(() => {
+    if (!caratId || activeCaratOptions.some((o) => o.value === caratId)) return activeCaratOptions
+    const own = (carats ?? []).find((c) => String(c.id) === caratId)
+    if (!own) return activeCaratOptions
+    const label = own.purity ? `${own.name} (${own.purity})` : own.name
+    return [...activeCaratOptions, { value: String(own.id), label: `${label} — inactive` }]
+  }, [activeCaratOptions, carats, caratId])
 
   // Spell out the cumulative reach (2.2) as the admin tags tiers — tagging Gold
   // silently also exposes the product to Platinum, which is easy to miss.
@@ -243,10 +348,19 @@ export function ProductFormPage() {
       toast.error('Please select a category')
       return
     }
+    if (!caratId) {
+      toast.error('Please select a carat')
+      return
+    }
+    if (netError) {
+      toast.error(netError)
+      return
+    }
     const payload = {
       name: values.name,
       sku: values.sku,
       categoryId: Number(categoryId),
+      caratId: Number(caratId),
       grossWeight: values.grossWeight,
       netWeight: values.netWeight ? Number(values.netWeight) : null,
       // Keep only complete rows (a label and a valid number), stored as numbers.
@@ -254,7 +368,6 @@ export function ProductFormPage() {
         .map((r) => ({ label: r.label.trim(), weight: Number(r.weight) }))
         .filter((r) => r.label.length > 0 && Number.isFinite(r.weight)),
       size: values.size,
-      purity: values.purity,
       stoneDetails: values.stoneDetails,
       notes: values.notes,
       images,
@@ -326,6 +439,15 @@ export function ProductFormPage() {
               )}
               <button
                 type="button"
+                aria-label="Re-crop image"
+                title="Re-crop"
+                className="absolute bottom-1 right-1 flex size-6 items-center justify-center rounded-full bg-background/90 text-foreground opacity-0 shadow ring-1 ring-border transition-opacity group-hover:opacity-100"
+                onClick={() => recropImage(i)}
+              >
+                <CropIcon className="size-3.5" />
+              </button>
+              <button
+                type="button"
                 aria-label="Remove image"
                 className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow transition-opacity group-hover:opacity-100"
                 onClick={() => removeImage(i)}
@@ -378,7 +500,8 @@ export function ProductFormPage() {
         )}
       </div>
       <p className="shrink-0 text-xs text-muted-foreground">
-        Drag & drop or click a slot to upload. The first image is used as the main thumbnail.
+        Drag & drop or click a slot to upload — each image is cropped to a square
+        before it's added. The first image is used as the main thumbnail.
       </p>
     </div>
   )
@@ -388,32 +511,23 @@ export function ProductFormPage() {
       onSubmit={handleSubmit(onSubmit)}
       className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto"
     >
-      {/* Header: back icon + title on the left, Cancel / Save actions on the right. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={goBack}
-            aria-label="Back to Products"
-          >
-            <ArrowLeft className="size-4" />
-          </Button>
-          <div>
-            <h1 className="font-heading text-xl font-semibold sm:text-2xl">
-              {isEdit ? 'Edit Product' : 'Add Product'}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">Products are shown without a price.</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button type="button" variant="outline" onClick={goBack}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={adding || updating}>
-            {isEdit ? 'Save Changes' : 'Add Product'}
-          </Button>
+      {/* Header: back icon + title. The Cancel / Save actions live in the sticky
+          footer at the bottom of the form, where the eye ends up after filling it in. */}
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={goBack}
+          aria-label="Back to Products"
+        >
+          <ArrowLeft className="size-4" />
+        </Button>
+        <div>
+          <h1 className="font-heading text-xl font-semibold sm:text-2xl">
+            {isEdit ? 'Edit Product' : 'Add Product'}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">Products are shown without a price.</p>
         </div>
       </div>
 
@@ -466,15 +580,43 @@ export function ProductFormPage() {
               <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
                 <Input id="p-gw" type="number" step="0.01" {...register('grossWeight', { valueAsNumber: true })} />
               </Field>
-              <Field label="Net Weight (gm)" htmlFor="p-nw" optional>
-                <Input id="p-nw" type="number" step="0.01" {...register('netWeight')} />
+              <Field
+                label="Net Weight (gm)"
+                htmlFor="p-nw"
+                error={netError}
+                hint={
+                  autoNet == null
+                    ? 'Calculated from Gross − Less factors once a gross weight is entered.'
+                    : netOverridden
+                      ? `Entered manually. Calculated value is ${autoNet} gm (Gross ${grossWeight} − Less ${lessTotal}).`
+                      : `Auto-calculated: Gross ${grossWeight} − Less ${lessTotal}. Type here to override.`
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="p-nw"
+                    type="number"
+                    step="0.001"
+                    className="flex-1"
+                    {...register('netWeight', {
+                      // Typing hands the field over to the admin; the formula stops
+                      // writing to it until "Use calculated" hands it back.
+                      onChange: () => setNetOverridden(true),
+                    })}
+                  />
+                  {netOverridden && autoNet != null && String(autoNet) !== netWeight && (
+                    <Button type="button" variant="outline" size="sm" onClick={useCalculatedNet}>
+                      Use {autoNet}
+                    </Button>
+                  )}
+                </div>
               </Field>
             </div>
 
             <Field
               label="Less Weight Factors"
               optional
-              hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). Shown on the product page; does not change Gross/Net."
+              hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). The total is subtracted from Gross to give the Net weight above."
             >
               <div className="grid gap-2">
                 {lessFactors.map((row, i) => (
@@ -516,8 +658,20 @@ export function ProductFormPage() {
               <Field label="Size" htmlFor="p-size" optional hint="Ring size / chain length / diameter">
                 <Input id="p-size" {...register('size')} />
               </Field>
-              <Field label="Purity / Metal" htmlFor="p-purity" error={errors.purity?.message}>
-                <Input id="p-purity" placeholder="e.g. 22K Gold" {...register('purity')} />
+              <Field
+                label="Carat / Purity"
+                hint={
+                  caratOptions.length === 0
+                    ? 'No carats defined yet — add them under Carats first.'
+                    : 'Managed in the Carats master'
+                }
+              >
+                <SelectField
+                  value={caratId}
+                  onValueChange={setCaratId}
+                  options={caratOptions}
+                  placeholder="Select carat"
+                />
               </Field>
             </div>
 
@@ -535,6 +689,32 @@ export function ProductFormPage() {
             {imageSection}
           </div>
         </div>
+
+      {/* Sticky action bar — pinned to the bottom of the scrolling form so Save is
+          always within reach, however long the details column gets. */}
+      <div className="sticky bottom-0 z-20 mt-auto flex items-center justify-between gap-3 border-t bg-background/90 py-3 backdrop-blur">
+        <p className="hidden text-sm text-muted-foreground sm:block">
+          {autoNet != null
+            ? `Gross ${grossWeight} gm · Less ${lessTotal} gm · Net ${netWeight || '—'} gm`
+            : 'Enter a gross weight to calculate the net weight.'}
+        </p>
+        <div className="flex shrink-0 gap-2 max-sm:w-full">
+          <Button type="button" variant="outline" onClick={goBack} className="max-sm:flex-1">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={adding || updating} className="max-sm:flex-1">
+            {isEdit ? 'Save Changes' : 'Add Product'}
+          </Button>
+        </div>
+      </div>
+
+      <ImageCropperDialog
+        sources={cropQueue}
+        aspect={PRODUCT_ASPECT}
+        onComplete={onCropDone}
+        onCancel={onCropCancel}
+        title={recropIndex != null ? 'Re-crop image' : 'Crop product image'}
+      />
     </form>
   )
 }

@@ -2,6 +2,7 @@ import { collection } from '@/services/db'
 import type {
   AuditLog,
   Banner,
+  Carat,
   Category,
   Customer,
   CustomerType,
@@ -16,6 +17,7 @@ import type {
 export const customerTypesRepo = collection<CustomerType>('customerTypes')
 export const customersRepo = collection<Customer>('customers')
 export const categoriesRepo = collection<Category>('categories')
+export const caratsRepo = collection<Carat>('carats')
 export const productsRepo = collection<Product>('products')
 export const inquiriesRepo = collection<Inquiry>('inquiries')
 export const bannersRepo = collection<Banner>('banners')

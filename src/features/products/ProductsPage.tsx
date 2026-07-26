@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/format'
 import {
   useDeleteProductMutation,
+  useListCaratsQuery,
   useListCategoriesQuery,
   useListCustomerTypesQuery,
   useListProductsQuery,
@@ -24,6 +25,7 @@ export function ProductsPage() {
   const { data: products, isLoading } = useListProductsQuery()
   const { data: categories } = useListCategoriesQuery()
   const { data: customerTypes } = useListCustomerTypesQuery()
+  const { data: carats } = useListCaratsQuery()
   const [deleteProduct] = useDeleteProductMutation()
 
   const tiers = useMemo(() => customerTypes ?? [], [customerTypes])
@@ -34,6 +36,16 @@ export function ProductsPage() {
     const m = new Map((categories ?? []).map((c) => [c.id, c.name]))
     return (id?: Id) => (id != null ? m.get(id) ?? '—' : '—')
   }, [categories])
+
+  // Falls back to the legacy purity text for products created before the carat
+  // master (and for any whose carat has since been deleted).
+  const caratName = useMemo(() => {
+    const m = new Map((carats ?? []).map((c) => [c.id, c.name]))
+    return (product?: Product) => {
+      if (!product) return '—'
+      return (product.caratId != null ? m.get(product.caratId) : undefined) ?? product.purity ?? '—'
+    }
+  }, [carats])
 
   // Which customer types can actually see a given product, as a readable list.
   const audienceNames = useMemo(
@@ -107,7 +119,13 @@ export function ProductsPage() {
         valueGetter: (p) => audienceNames(p.data),
         cellRenderer: (p: { value: string }) => <span className="text-sm">{p.value}</span>,
       },
-      { headerName: 'Purity', field: 'purity' },
+      {
+        headerName: 'Carat',
+        colId: 'carat',
+        // Resolved from the carat master rather than the product's stored purity
+        // text, so renaming a carat updates every product that uses it.
+        valueGetter: (p) => caratName(p.data),
+      },
       { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130 },
       { headerName: 'Net (gm)', field: 'netWeight', maxWidth: 120, valueFormatter: (p) => (p.value != null ? p.value : '—') },
       { headerName: 'Size', field: 'size', valueFormatter: (p) => p.value || '—' },
@@ -142,7 +160,7 @@ export function ProductsPage() {
         ),
       },
     ],
-    [categoryName, audienceNames, navigate]
+    [categoryName, caratName, audienceNames, navigate]
   )
 
   return (
