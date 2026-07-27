@@ -58,6 +58,12 @@ export interface Category extends Timestamped {
   description?: string
   /** Data URL (uploaded) or remote image URL. Empty when no image. */
   imageUrl?: string
+  /**
+   * Display position, set by dragging rows in the Categories grid. Lower shows
+   * first — here, in the category pickers, and in the customer app. Assigned by
+   * the server, so it's never part of the add/edit form.
+   */
+  sortOrder?: number
 }
 
 /**

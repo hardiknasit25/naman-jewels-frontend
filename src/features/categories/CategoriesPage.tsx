@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react'
-import type { ColDef } from 'ag-grid-community'
+import type { ColDef, RowDragEndEvent } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
@@ -28,11 +28,27 @@ import {
   useAddCategoryMutation,
   useDeleteCategoryMutation,
   useListCategoriesQuery,
+  useReorderCategoriesMutation,
   useUpdateCategoryMutation,
 } from '@/services/api'
 import type { Category, Id } from '@/types'
 
 const NONE = 'none'
+
+// Leading handle column — AG Grid renders the grip icon itself for `rowDrag`.
+const DRAG_COLUMN: ColDef<Category> = {
+  headerName: '',
+  colId: 'drag',
+  rowDrag: true,
+  pinned: 'left',
+  width: 56,
+  minWidth: 56,
+  maxWidth: 56,
+  sortable: false,
+  filter: false,
+  resizable: false,
+  cellClass: 'px-2!',
+}
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
@@ -193,12 +209,38 @@ function CategoryFormDialog({
 }
 
 export function CategoriesPage() {
-  const { data: categories, isLoading } = useListCategoriesQuery()
+  const { data: categories, isLoading, refetch } = useListCategoriesQuery()
   const [deleteCategory] = useDeleteCategoryMutation()
+  const [reorderCategories, { isLoading: savingOrder }] = useReorderCategoriesMutation()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Category | undefined>()
   const [toDelete, setToDelete] = useState<Category | undefined>()
+
+  // Managed dragging has already moved the row by the time this fires, so the
+  // grid's own row order is the new order.
+  const onRowDragEnd = useCallback(
+    async (e: RowDragEndEvent<Category>) => {
+      const ids: Id[] = []
+      e.api.forEachNodeAfterFilterAndSort((node) => {
+        if (node.data) ids.push(node.data.id)
+      })
+      // Dropping a row back where it started still fires this event — don't
+      // spend a round trip (and an audit log entry) on an unchanged order.
+      const current = (categories ?? []).map((c) => c.id)
+      if (ids.length === current.length && ids.every((id, i) => id === current[i])) return
+
+      try {
+        await reorderCategories(ids).unwrap()
+        toast.success('Category order saved')
+      } catch {
+        toast.error('Could not save the new order')
+        // Put the grid back to the order the server still holds.
+        refetch()
+      }
+    },
+    [categories, reorderCategories, refetch]
+  )
 
   const parentName = useMemo(() => {
     const m = new Map((categories ?? []).map((c) => [c.id, c.name]))
@@ -280,11 +322,19 @@ export function CategoriesPage() {
     [parentName]
   )
 
+  // The drag handle leads every row. Sorting and filtering are switched off on
+  // this grid on purpose: AG Grid disables managed dragging while either is
+  // active, so leaving them on would let one header click kill the handles.
+  const gridColumns = useMemo<ColDef<Category>[]>(
+    () => [DRAG_COLUMN, ...columns.map((c) => ({ ...c, sortable: false, filter: false }))],
+    [columns]
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Categories"
-        description="Organise products into categories and sub-categories."
+        description="Organise products into categories and sub-categories. Drag a row by its handle to set the order customers see."
         action={
           <Button
             onClick={() => {
@@ -297,7 +347,21 @@ export function CategoriesPage() {
         }
       />
 
-      <DataGrid rowData={categories} columnDefs={columns} loading={isLoading} rowHeight={64} />
+      {savingOrder && (
+        <p className="text-sm text-muted-foreground">Saving new order…</p>
+      )}
+
+      {/* pagination={false} is required, not cosmetic: AG Grid silently drops the
+          drag handle when managed dragging is combined with pagination. */}
+      <DataGrid
+        rowData={categories}
+        columnDefs={gridColumns}
+        loading={isLoading}
+        rowHeight={64}
+        pagination={false}
+        rowDragManaged
+        onRowDragEnd={onRowDragEnd}
+      />
 
       <CategoryFormDialog
         open={formOpen}

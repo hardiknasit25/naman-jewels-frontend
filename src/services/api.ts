@@ -8,6 +8,7 @@ import {
   customersRepo,
   inquiriesRepo,
   productsRepo,
+  reorderCategories as reorderCategoriesRepo,
   sessionLogsRepo,
   staticPagesRepo,
 } from '@/services/repositories'
@@ -101,6 +102,12 @@ export const api = createApi({
     }),
     deleteCategory: build.mutation<{ id: Id }, Id>({
       queryFn: (id) => run(() => categoriesRepo.remove(id)),
+      invalidatesTags: ['Category'],
+    }),
+    // Drag-to-reorder in the Categories grid. Takes every category id in its new
+    // order; the order drives the pickers here and the customer app's listing.
+    reorderCategories: build.mutation<Category[], Id[]>({
+      queryFn: (ids) => run(() => reorderCategoriesRepo(ids)),
       invalidatesTags: ['Category'],
     }),
 
@@ -213,6 +220,7 @@ export const {
   useAddCategoryMutation,
   useUpdateCategoryMutation,
   useDeleteCategoryMutation,
+  useReorderCategoriesMutation,
   useListCaratsQuery,
   useAddCaratMutation,
   useUpdateCaratMutation,

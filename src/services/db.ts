@@ -96,6 +96,22 @@ export function collection<T extends Timestamped>(
   }
 }
 
+/**
+ * Persist a manual display order for a collection that supports one (currently
+ * categories). `ids` is every row in its new order; the backend rewrites the
+ * positions and returns the re-sorted list.
+ */
+export function reorderCollection<T extends Timestamped>(
+  name: string,
+  ids: Id[]
+): Promise<T[]> {
+  const path = `/${PATHS[name] ?? name}`
+  return http<T[]>(`${path}/reorder`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ids }),
+  })
+}
+
 /** No-op kept for backwards compatibility (data now lives in the backend). */
 export function resetDb() {
   /* handled by the backend seed */

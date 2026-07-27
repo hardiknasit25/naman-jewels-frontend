@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type ReactNode,
+} from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,7 +18,6 @@ import { Field } from '@/components/shared/Field'
 import { SelectField } from '@/components/shared/SelectField'
 import { ImageCropperDialog } from '@/components/shared/ImageCropperDialog'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { fileToDataUrl } from '@/lib/cropImage'
@@ -41,6 +48,32 @@ const PRODUCT_ASPECT = 1
 
 /** Round to milligrams — floating point sums of 0.001-precision inputs drift. */
 const round3 = (n: number) => Math.round(n * 1000) / 1000
+
+/**
+ * One titled block of the form. The page is long enough that a single flat card
+ * made it hard to find anything; each concern gets its own panel and heading.
+ */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  return (
+    <section className="grid gap-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+      <div>
+        <h2 className="font-heading text-base font-semibold">{title}</h2>
+        {description && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  )
+}
 
 /**
  * 2.2 Tier tagging — toggle a product into one or more customer types. Rendered as
@@ -407,11 +440,18 @@ export function ProductFormPage() {
   const imageSection = (
     // Fills the right column's height on laptops so the gallery scrolls inside
     // the fixed panel instead of stretching the page.
-    <div className="flex flex-col gap-1.5 lg:min-h-0 lg:flex-1">
-      <Label htmlFor="p-image">
-        Product Images
-        <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
-      </Label>
+    <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1">
+      {/* Matches the heading style of the detail sections on the left. */}
+      <div>
+        <h2 className="font-heading text-base font-semibold">
+          Product Images
+          <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
+        </h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Drag &amp; drop or click a slot to upload. Each image is cropped square, and
+          the first one is used as the main thumbnail.
+        </p>
+      </div>
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
@@ -491,18 +531,15 @@ export function ProductFormPage() {
           accept="image/*"
           multiple
           onChange={onImagesChange}
+          aria-label="Product images"
           className="sr-only"
         />
         {images.length > 0 && (
           <p className="mt-3 shrink-0 text-center text-xs text-muted-foreground">
-            {`${images.length} image${images.length === 1 ? '' : 's'} added — drag & drop or use “Add more” to upload as many as you like`}
+            {`${images.length} image${images.length === 1 ? '' : 's'} added — there's no limit`}
           </p>
         )}
       </div>
-      <p className="shrink-0 text-xs text-muted-foreground">
-        Drag & drop or click a slot to upload — each image is cropped to a square
-        before it's added. The first image is used as the main thumbnail.
-      </p>
     </div>
   )
 
@@ -534,153 +571,181 @@ export function ProductFormPage() {
       {/* Flex row on laptops: details fill the left, images are a fixed-width block
           pinned to the right. Stacks (images on top) on tablet / mobile. */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-          {/* Details */}
-          <div className="order-2 grid gap-4 rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-1 lg:min-h-[calc(100vh-2rem)] lg:min-w-0 lg:flex-1 lg:content-start">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Product Name" htmlFor="p-name" error={errors.name?.message}>
-                <Input id="p-name" {...register('name')} />
-              </Field>
-              <Field label="Product Code / SKU" htmlFor="p-sku" error={errors.sku?.message}>
-                <Input id="p-sku" placeholder="e.g. RG-1042" {...register('sku')} />
-              </Field>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Category">
-                <SelectField value={categoryId} onValueChange={setCategoryId} options={categoryOptions} placeholder="Select category" />
-              </Field>
-              <Field
-                label="Status"
-                hint={
-                  status === 'private'
-                    ? 'Hidden from the customer app'
-                    : 'Published to the customer app'
-                }
-              >
-                <SelectField
-                  value={status}
-                  onValueChange={(v) => setStatus(v as ProductStatus)}
-                  options={[
-                    { value: 'live', label: 'Live (published)' },
-                    { value: 'private', label: 'Private (hidden)' },
-                  ]}
-                />
-              </Field>
-            </div>
-
-            <Field
-              label="Visible to Customer Types"
-              optional
-              hint={audienceHint}
+          {/* Details — one card per concern rather than a single long slab, so the
+              form reads as four short steps instead of eleven loose fields. */}
+          <div className="order-2 flex flex-col gap-4 lg:order-1 lg:min-h-[calc(100vh-2rem)] lg:min-w-0 lg:flex-1">
+            <Section
+              title="Product Details"
+              description="What the piece is and where it sits in the catalogue."
             >
-              <TierPicker tiers={tiers} value={customerTypeIds} onChange={setCustomerTypeIds} />
-            </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Product Name" htmlFor="p-name" error={errors.name?.message}>
+                  <Input id="p-name" {...register('name')} />
+                </Field>
+                <Field label="Product Code / SKU" htmlFor="p-sku" error={errors.sku?.message}>
+                  <Input id="p-sku" placeholder="e.g. RG-1042" {...register('sku')} />
+                </Field>
+              </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
-                <Input id="p-gw" type="number" step="0.01" {...register('grossWeight', { valueAsNumber: true })} />
-              </Field>
-              <Field
-                label="Net Weight (gm)"
-                htmlFor="p-nw"
-                error={netError}
-                hint={
-                  autoNet == null
-                    ? 'Calculated from Gross − Less factors once a gross weight is entered.'
-                    : netOverridden
-                      ? `Entered manually. Calculated value is ${autoNet} gm (Gross ${grossWeight} − Less ${lessTotal}).`
-                      : `Auto-calculated: Gross ${grossWeight} − Less ${lessTotal}. Type here to override.`
-                }
-              >
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="p-nw"
-                    type="number"
-                    step="0.001"
-                    className="flex-1"
-                    {...register('netWeight', {
-                      // Typing hands the field over to the admin; the formula stops
-                      // writing to it until "Use calculated" hands it back.
-                      onChange: () => setNetOverridden(true),
-                    })}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Category">
+                  <SelectField value={categoryId} onValueChange={setCategoryId} options={categoryOptions} placeholder="Select category" />
+                </Field>
+                <Field
+                  label="Carat / Purity"
+                  hint={
+                    caratOptions.length === 0
+                      ? 'No carats defined yet — add them under Carats first.'
+                      : 'Managed in the Carats master'
+                  }
+                >
+                  <SelectField
+                    value={caratId}
+                    onValueChange={setCaratId}
+                    options={caratOptions}
+                    placeholder="Select carat"
                   />
-                  {netOverridden && autoNet != null && String(autoNet) !== netWeight && (
-                    <Button type="button" variant="outline" size="sm" onClick={useCalculatedNet}>
-                      Use {autoNet}
+                </Field>
+              </div>
+            </Section>
+
+            {/* Laid out as the calculation runs: Gross, what comes off it, what's left. */}
+            <Section
+              title="Weight"
+              description="Gross weight, the factors deducted from it, and the net weight they leave."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
+                  <Input id="p-gw" type="number" step="0.01" {...register('grossWeight', { valueAsNumber: true })} />
+                </Field>
+              </div>
+
+              <Field
+                label="Less Weight Factors"
+                optional
+                hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). The total is subtracted from Gross to give the Net weight below."
+              >
+                <div className="grid gap-2">
+                  {lessFactors.map((row, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Factor (e.g. Stone)"
+                        value={row.label}
+                        onChange={(e) => updateFactor(i, 'label', e.target.value)}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step="0.001"
+                        placeholder="Weight (gm)"
+                        value={row.weight}
+                        onChange={(e) => updateFactor(i, 'weight', e.target.value)}
+                        className="w-32"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Remove factor"
+                        onClick={() => removeFactor(i)}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-3">
+                    <Button type="button" variant="outline" size="sm" onClick={addFactor}>
+                      <Plus className="size-4" /> Add factor
                     </Button>
-                  )}
+                    {/* The running total is otherwise only visible buried in the
+                        Net Weight hint. */}
+                    {lessFactors.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Total less{' '}
+                        <span className="font-medium text-foreground">{lessTotal} gm</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
               </Field>
-            </div>
 
-            <Field
-              label="Less Weight Factors"
-              optional
-              hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). The total is subtracted from Gross to give the Net weight above."
-            >
-              <div className="grid gap-2">
-                {lessFactors.map((row, i) => (
-                  <div key={i} className="flex items-center gap-2">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Net Weight (gm)"
+                  htmlFor="p-nw"
+                  error={netError}
+                  hint={
+                    autoNet == null
+                      ? 'Calculated from Gross − Less factors once a gross weight is entered.'
+                      : netOverridden
+                        ? `Entered manually. Calculated value is ${autoNet} gm (Gross ${grossWeight} − Less ${lessTotal}).`
+                        : `Auto-calculated: Gross ${grossWeight} − Less ${lessTotal}. Type here to override.`
+                  }
+                >
+                  <div className="flex items-center gap-2">
                     <Input
-                      placeholder="Factor (e.g. Stone)"
-                      value={row.label}
-                      onChange={(e) => updateFactor(i, 'label', e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
+                      id="p-nw"
                       type="number"
                       step="0.001"
-                      placeholder="Weight (gm)"
-                      value={row.weight}
-                      onChange={(e) => updateFactor(i, 'weight', e.target.value)}
-                      className="w-32"
+                      className="flex-1"
+                      {...register('netWeight', {
+                        // Typing hands the field over to the admin; the formula stops
+                        // writing to it until "Use calculated" hands it back.
+                        onChange: () => setNetOverridden(true),
+                      })}
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label="Remove factor"
-                      onClick={() => removeFactor(i)}
-                    >
-                      <X className="size-4" />
-                    </Button>
+                    {netOverridden && autoNet != null && String(autoNet) !== netWeight && (
+                      <Button type="button" variant="outline" size="sm" onClick={useCalculatedNet}>
+                        Use {autoNet}
+                      </Button>
+                    )}
                   </div>
-                ))}
-                <div>
-                  <Button type="button" variant="outline" size="sm" onClick={addFactor}>
-                    <Plus className="size-4" /> Add factor
-                  </Button>
-                </div>
+                </Field>
               </div>
-            </Field>
+            </Section>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Size" htmlFor="p-size" optional hint="Ring size / chain length / diameter">
-                <Input id="p-size" {...register('size')} />
+            <Section
+              title="Specifications"
+              description="Optional detail rows shown on the product page in the customer app."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Size" htmlFor="p-size" optional hint="Ring size / chain length / diameter">
+                  <Input id="p-size" {...register('size')} />
+                </Field>
+                <Field label="Stone Details" htmlFor="p-stone" optional>
+                  <Input id="p-stone" placeholder="Type, weight/carat, quantity" {...register('stoneDetails')} />
+                </Field>
+              </div>
+              <Field label="Other Notes / Tags" htmlFor="p-notes" optional>
+                <Input id="p-notes" {...register('notes')} />
               </Field>
-              <Field
-                label="Carat / Purity"
-                hint={
-                  caratOptions.length === 0
-                    ? 'No carats defined yet — add them under Carats first.'
-                    : 'Managed in the Carats master'
-                }
-              >
-                <SelectField
-                  value={caratId}
-                  onValueChange={setCaratId}
-                  options={caratOptions}
-                  placeholder="Select carat"
-                />
-              </Field>
-            </div>
+            </Section>
 
-            <Field label="Stone Details" htmlFor="p-stone" optional>
-              <Input id="p-stone" placeholder="Type, weight/carat, quantity" {...register('stoneDetails')} />
-            </Field>
-            <Field label="Other Notes / Tags" htmlFor="p-notes" optional>
-              <Input id="p-notes" {...register('notes')} />
-            </Field>
+            <Section title="Visibility" description="Who can see this product in the customer app.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Status"
+                  hint={
+                    status === 'private'
+                      ? 'Hidden from the customer app'
+                      : 'Published to the customer app'
+                  }
+                >
+                  <SelectField
+                    value={status}
+                    onValueChange={(v) => setStatus(v as ProductStatus)}
+                    options={[
+                      { value: 'live', label: 'Live (published)' },
+                      { value: 'private', label: 'Private (hidden)' },
+                    ]}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Visible to Customer Types" optional hint={audienceHint}>
+                <TierPicker tiers={tiers} value={customerTypeIds} onChange={setCustomerTypeIds} />
+              </Field>
+            </Section>
           </div>
 
           {/* Images — fixed-width block on the right on laptops, sticky so it stays
