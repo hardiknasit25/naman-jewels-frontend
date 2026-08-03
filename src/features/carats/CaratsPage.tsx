@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -196,6 +197,30 @@ export function CaratsPage() {
         headerName: 'Status',
         field: 'active',
         maxWidth: 130,
+        // The cell value is the raw boolean, so the option values match it as text.
+        ...optionsFilter<Carat>(
+          [
+            {
+              value: 'true',
+              label: 'Active',
+              node: (
+                <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  Active
+                </Badge>
+              ),
+            },
+            {
+              value: 'false',
+              label: 'Inactive',
+              node: (
+                <Badge variant="ghost" className="bg-muted text-muted-foreground">
+                  Inactive
+                </Badge>
+              ),
+            },
+          ],
+          'All statuses'
+        ),
         cellRenderer: (p: { data: Carat }) =>
           p.data.active ? (
             <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
@@ -267,7 +292,13 @@ export function CaratsPage() {
         }
       />
 
-      <DataGrid rowData={rows} columnDefs={columns} loading={isLoading} />
+      <DataGrid
+        stateKey="carats"
+        searchPlaceholder="Search carats…"
+        rowData={rows}
+        columnDefs={columns}
+        loading={isLoading}
+      />
 
       <CaratFormDialog
         open={formOpen}

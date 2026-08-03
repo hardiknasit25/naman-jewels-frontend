@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, ImageIcon } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -46,6 +47,26 @@ export function ProductsPage() {
       return (product.caratId != null ? m.get(product.caratId) : undefined) ?? product.purity ?? '—'
     }
   }, [carats])
+
+  // Columns backed by a master table filter with a tick list of that table's
+  // values rather than a search box. Each option renders as the badge its cell
+  // shows, so the list and the applied-filter chips read like the grid.
+  const categoryFilterOptions = useMemo(
+    () =>
+      (categories ?? []).map((c) => ({
+        value: c.name,
+        label: c.name,
+        node: <Badge variant="secondary">{c.name}</Badge>,
+      })),
+    [categories]
+  )
+  const caratFilterOptions = useMemo(
+    () =>
+      [...(carats ?? [])]
+        .sort((a, b) => a.order - b.order)
+        .map((c) => ({ value: c.name, label: c.name })),
+    [carats]
+  )
 
   // Which customer types can actually see a given product, as a readable list.
   const audienceNames = useMemo(
@@ -97,12 +118,28 @@ export function ProductsPage() {
         colId: 'category',
         valueGetter: (p) => categoryName(p.data?.categoryId),
         cellRenderer: (p: { value: string }) => <Badge variant="secondary">{p.value}</Badge>,
+        ...optionsFilter<Product>(categoryFilterOptions, 'All categories'),
       },
       {
         headerName: 'Status',
         colId: 'status',
         maxWidth: 120,
         valueGetter: (p) => p.data?.status ?? 'live',
+        ...optionsFilter<Product>(
+          [
+            { value: 'live', label: 'Live', node: <Badge variant="secondary">Live</Badge> },
+            {
+              value: 'private',
+              label: 'Private',
+              node: (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Private
+                </Badge>
+              ),
+            },
+          ],
+          'All statuses'
+        ),
         cellRenderer: (p: { value: string }) =>
           p.value === 'private' ? (
             <Badge variant="outline" className="text-muted-foreground">Private</Badge>
@@ -125,6 +162,7 @@ export function ProductsPage() {
         // Resolved from the carat master rather than the product's stored purity
         // text, so renaming a carat updates every product that uses it.
         valueGetter: (p) => caratName(p.data),
+        ...optionsFilter<Product>(caratFilterOptions, 'All carats'),
       },
       { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130 },
       { headerName: 'Net (gm)', field: 'netWeight', maxWidth: 120, valueFormatter: (p) => (p.value != null ? p.value : '—') },
@@ -160,7 +198,7 @@ export function ProductsPage() {
         ),
       },
     ],
-    [categoryName, caratName, audienceNames, navigate]
+    [categoryName, caratName, audienceNames, categoryFilterOptions, caratFilterOptions, navigate]
   )
 
   return (
@@ -175,7 +213,14 @@ export function ProductsPage() {
         }
       />
 
-      <DataGrid rowData={products} columnDefs={columns} loading={isLoading} rowHeight={64} />
+      <DataGrid
+        stateKey="products"
+        searchPlaceholder="Search products…"
+        rowData={products}
+        columnDefs={columns}
+        loading={isLoading}
+        rowHeight={64}
+      />
 
       <ConfirmDialog
         open={Boolean(toDelete)}

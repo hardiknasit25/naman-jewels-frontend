@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Eye, EyeOff, ImageIcon } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -182,7 +183,7 @@ function BannerFormDialog({
           }}
           onCancel={() => setCropQueue([])}
           title="Crop banner image"
-          description="Banners are cropped to 16:9. Drag to reposition, scroll or use the slider to zoom."
+          description="Banners are always 16:9. Drag a box over the part of the image you want to show — the ratio stays locked while you resize it."
         />
       </DialogContent>
     </Dialog>
@@ -233,6 +234,30 @@ export function BannersPage() {
       {
         headerName: 'Status',
         field: 'active',
+        // The cell value is the raw boolean, so the option values match it as text.
+        ...optionsFilter<Banner>(
+          [
+            {
+              value: 'true',
+              label: 'Active',
+              node: (
+                <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  Active
+                </Badge>
+              ),
+            },
+            {
+              value: 'false',
+              label: 'Hidden',
+              node: (
+                <Badge variant="ghost" className="bg-muted text-muted-foreground">
+                  Hidden
+                </Badge>
+              ),
+            },
+          ],
+          'All statuses'
+        ),
         cellRenderer: (p: { data: Banner }) =>
           p.data.active ? (
             <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">Active</Badge>
@@ -298,7 +323,14 @@ export function BannersPage() {
         }
       />
 
-      <DataGrid rowData={rows} columnDefs={columns} loading={isLoading} rowHeight={56} />
+      <DataGrid
+        stateKey="banners"
+        searchPlaceholder="Search banners…"
+        rowData={rows}
+        columnDefs={columns}
+        loading={isLoading}
+        rowHeight={56}
+      />
 
       <BannerFormDialog open={formOpen} onOpenChange={setFormOpen} record={editing} />
 

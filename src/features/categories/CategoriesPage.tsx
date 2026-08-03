@@ -221,6 +221,12 @@ export function CategoriesPage() {
   // grid's own row order is the new order.
   const onRowDragEnd = useCallback(
     async (e: RowDragEndEvent<Category>) => {
+      // Only the full, unfiltered list describes a complete order — saving the
+      // order of a searched-down subset would drop every hidden category. AG Grid
+      // already suppresses managed dragging while a filter is on; this makes sure
+      // a stray event can't get through either.
+      if (e.api.isAnyFilterPresent()) return
+
       const ids: Id[] = []
       e.api.forEachNodeAfterFilterAndSort((node) => {
         if (node.data) ids.push(node.data.id)
@@ -353,7 +359,12 @@ export function CategoriesPage() {
 
       {/* pagination={false} is required, not cosmetic: AG Grid silently drops the
           drag handle when managed dragging is combined with pagination. */}
+      {/* Column filters stay off for the same reason sorting does — see gridColumns.
+          The toolbar search is safe: dragging is suppressed while it's active. */}
       <DataGrid
+        stateKey="categories"
+        searchPlaceholder="Search categories…"
+        filters={false}
         rowData={categories}
         columnDefs={gridColumns}
         loading={isLoading}

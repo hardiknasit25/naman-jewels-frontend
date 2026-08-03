@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime } from '@/lib/format'
@@ -32,6 +33,20 @@ export function AuditLogsPage() {
         headerName: 'Action',
         field: 'action',
         maxWidth: 130,
+        // The actions an audit entry can record are a closed set — same keys as
+        // actionClass above.
+        ...optionsFilter<AuditLog>(
+          Object.entries(actionClass).map(([action, className]) => ({
+            value: action,
+            label: action,
+            node: (
+              <Badge variant="ghost" className={className}>
+                {action}
+              </Badge>
+            ),
+          })),
+          'All actions'
+        ),
         cellRenderer: (p: { data: AuditLog }) => (
           <Badge variant="ghost" className={actionClass[p.data.action] ?? 'bg-muted text-muted-foreground'}>
             {p.data.action}
@@ -49,7 +64,13 @@ export function AuditLogsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader title="Audit Logs" description="Every create, update and delete across the system." />
-      <DataGrid rowData={logs} columnDefs={columns} loading={isLoading} />
+      <DataGrid
+        stateKey="audit"
+        searchPlaceholder="Search audit logs…"
+        rowData={logs}
+        columnDefs={columns}
+        loading={isLoading}
+      />
     </div>
   )
 }

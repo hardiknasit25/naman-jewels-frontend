@@ -1,4 +1,4 @@
-/** Pixel rectangle produced by react-easy-crop's onCropComplete. */
+/** Crop rectangle in the source image's own pixels. */
 export interface CropArea {
   x: number
   y: number

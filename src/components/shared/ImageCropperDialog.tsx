@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Cropper, { type Area } from 'react-easy-crop'
-import 'react-easy-crop/react-easy-crop.css'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactCrop, {
+  centerCrop,
+  convertToPixelCrop,
+  makeAspectCrop,
+  type Crop,
+  type PixelCrop,
+} from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 import { toast } from 'sonner'
-import { ZoomIn, ZoomOut, RotateCcw, Minimize2, Maximize2 } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,24 +18,54 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
-import { cropImageToDataUrl } from '@/lib/cropImage'
+import { cropImageToDataUrl, type CropArea } from '@/lib/cropImage'
 
-const MIN_ZOOM = 1
-const MAX_ZOOM = 4
-/** Smallest the crop box may shrink to, as a fraction of the largest box that fits. */
-const MIN_CROP_SCALE = 0.3
-/** Breathing room around the crop box so the corner handles stay easy to grab. */
-const FRAME_INSET = 16
+/** Smallest crop the user may drag, in on-screen pixels. */
+const MIN_CROP_PX = 24
+/** How much of the image the starting crop box covers. */
+const INITIAL_CROP_PERCENT = 90
 
-/** Corner handles — resizing is symmetric about the centre, so all four behave alike. */
-const CORNERS = [
-  { id: 'nw', position: '-left-px -top-px', cursor: 'nwse-resize', edges: 'border-l-2 border-t-2 rounded-tl' },
-  { id: 'ne', position: '-right-px -top-px', cursor: 'nesw-resize', edges: 'border-r-2 border-t-2 rounded-tr' },
-  { id: 'sw', position: '-bottom-px -left-px', cursor: 'nesw-resize', edges: 'border-b-2 border-l-2 rounded-bl' },
-  { id: 'se', position: '-bottom-px -right-px', cursor: 'nwse-resize', edges: 'border-b-2 border-r-2 rounded-br' },
-] as const
+/**
+ * Starting crop: centred, covering most of the image, and trimmed to `aspect`
+ * when one is locked.
+ */
+function initialCrop(aspect: number | null, width: number, height: number): Crop {
+  const base = { unit: '%' as const, x: 0, y: 0, width: INITIAL_CROP_PERCENT, height: INITIAL_CROP_PERCENT }
+  return centerCrop(
+    aspect == null ? base : makeAspectCrop(base, aspect, width, height),
+    width,
+    height
+  )
+}
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+/**
+ * Translate a crop measured against the displayed image into the source image's
+ * own pixels, which is what the canvas export works in.
+ *
+ * With a locked aspect the ratio is snapped back afterwards: the display box is
+ * whole pixels, so scaling it up can drift the ratio by a fraction of a pixel
+ * and a banner has to come out exactly 16:9.
+ */
+function toSourceArea(image: HTMLImageElement, crop: PixelCrop, aspect: number | null): CropArea {
+  const scaleX = image.naturalWidth / image.width
+  const scaleY = image.naturalHeight / image.height
+
+  const x = Math.max(0, crop.x * scaleX)
+  const y = Math.max(0, crop.y * scaleY)
+  let width = Math.min(crop.width * scaleX, image.naturalWidth - x)
+  let height = Math.min(crop.height * scaleY, image.naturalHeight - y)
+
+  if (aspect != null) {
+    height = width / aspect
+    // Only possible on a sub-pixel overshoot, so the trim is imperceptible.
+    if (y + height > image.naturalHeight) {
+      height = image.naturalHeight - y
+      width = height * aspect
+    }
+  }
+
+  return { x, y, width, height }
+}
 
 interface ImageCropperDialogProps {
   /**
@@ -37,8 +73,11 @@ interface ImageCropperDialogProps {
    * whenever this is non-empty and walks the queue one image at a time.
    */
   sources: string[]
-  /** Crop box ratio — 1 for square product/category tiles, 16/9 for banners. */
-  aspect: number
+  /**
+   * Crop box ratio — 1 for square category tiles, 16/9 for banners, or `null` for
+   * a free crop where any rectangle can be drawn (products).
+   */
+  aspect: number | null
   /** Cropped images, in the same order as `sources`. Fires once the queue ends. */
   onComplete: (images: string[]) => void
   /** User backed out — nothing from this queue should be kept. */
@@ -56,9 +95,10 @@ interface ImageCropperDialogProps {
  * app instead of inheriting whatever aspect ratio the phone camera produced. The
  * export also downsizes and re-encodes, which keeps the Base64 payloads small.
  *
- * The crop box itself is resizable by its corner handles (or the size slider) and
- * always keeps `aspect` — the ratio is locked, only how much of the frame the box
- * covers changes. Dragging anywhere else moves the image underneath it.
+ * The whole image stays on screen and the user drags a selection over it: with
+ * `aspect = null` that selection is any size and shape they like, and with an
+ * `aspect` the library holds the ratio while they resize, so banners can only
+ * ever be saved as 16:9.
  */
 export function ImageCropperDialog({
   sources,
@@ -71,18 +111,12 @@ export function ImageCropperDialog({
 }: ImageCropperDialogProps) {
   const [index, setIndex] = useState(0)
   const [done, setDone] = useState<string[]>([])
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(MIN_ZOOM)
-  const [cropScale, setCropScale] = useState(1)
-  const [area, setArea] = useState<Area | null>(null)
+  // Held in percent so the selection survives the dialog being resized; it is
+  // converted to pixels only at export time, against the image's current size.
+  const [crop, setCrop] = useState<Crop>()
   const [saving, setSaving] = useState(false)
-  const [frame, setFrame] = useState({ width: 0, height: 0 })
-  // Size the image is actually drawn at (letterboxed inside the frame), reported
-  // by the cropper once each image loads.
-  const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
 
-  const frameRef = useRef<HTMLDivElement>(null)
-  const resizingRef = useRef(false)
+  const imgRef = useRef<HTMLImageElement>(null)
 
   const open = sources.length > 0
   const current = sources[index]
@@ -95,76 +129,35 @@ export function ImageCropperDialog({
     setDone([])
   }, [open, sources])
 
-  // The crop box is sized in pixels, so the frame has to be measured (and
-  // re-measured when the dialog is resized or rotated).
+  // Dropped so the next image is never briefly shown with the previous one's
+  // selection before its own onLoad re-centres it.
   useEffect(() => {
-    if (!open) return
-    const el = frameRef.current
-    if (!el) return
-    const measure = () => setFrame({ width: el.clientWidth, height: el.clientHeight })
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [open])
+    setCrop(undefined)
+  }, [index])
 
-  // Largest box of the requested ratio that fits inside the frame AND inside the
-  // displayed image. Bounding by the image mirrors what react-easy-crop does on
-  // its own, and is what guarantees the crop is always fully covered — a box
-  // wider than a portrait photo would export white bars down the sides.
-  const maxCrop = useMemo(() => {
-    const frameWidth = frame.width - FRAME_INSET
-    const frameHeight = frame.height - FRAME_INSET
-    if (frameWidth <= 0 || frameHeight <= 0) return null
-    const fitWidth = Math.min(media?.width ?? frameWidth, frameWidth)
-    const fitHeight = Math.min(media?.height ?? frameHeight, frameHeight)
-    const width = fitWidth > fitHeight * aspect ? fitHeight * aspect : fitWidth
-    return { width, height: width / aspect }
-  }, [frame, aspect, media])
+  /** Centre a fresh selection on the image currently on screen. */
+  const resetCrop = useCallback(() => {
+    const image = imgRef.current
+    if (!image?.width || !image.height) return
+    // Seeded on load as well as on drag so "Use image" works without the user
+    // having to touch the box first.
+    setCrop(initialCrop(aspect, image.width, image.height))
+  }, [aspect])
 
-  // Passing cropSize (instead of aspect) is what makes the box resizable; the
-  // ratio stays locked because both edges are derived from the same scale.
-  const cropSize = useMemo(
-    () =>
-      maxCrop
-        ? { width: maxCrop.width * cropScale, height: maxCrop.height * cropScale }
-        : undefined,
-    [maxCrop, cropScale]
-  )
-
-  // Each image starts centred, unzoomed and at full crop size rather than
-  // inheriting the previous one's view.
-  const resetView = useCallback(() => {
-    setCrop({ x: 0, y: 0 })
-    setZoom(MIN_ZOOM)
-    setCropScale(1)
-    // Dropped so the next image's box is sized from its own dimensions, not the
-    // previous one's, in the frame between switching and onMediaLoaded firing.
-    setMedia(null)
-  }, [])
-
+  // A locked ratio can change while the dialog is mounted (different call sites
+  // reuse it), so re-centre rather than leave a selection at the old shape.
   useEffect(() => {
-    resetView()
-  }, [index, resetView])
-
-  // Resize from a corner: the box is centred, so the scale is driven by how far
-  // the pointer is from the centre. Whichever axis is further out wins, which
-  // keeps the dragged corner under the pointer as closely as the ratio allows.
-  const resizeToPointer = (clientX: number, clientY: number) => {
-    const el = frameRef.current
-    if (!el || !maxCrop) return
-    const rect = el.getBoundingClientRect()
-    const dx = Math.abs(clientX - (rect.left + rect.width / 2))
-    const dy = Math.abs(clientY - (rect.top + rect.height / 2))
-    const width = Math.max(dx * 2, dy * 2 * aspect)
-    setCropScale(clamp(width / maxCrop.width, MIN_CROP_SCALE, 1))
-  }
+    if (imgRef.current?.complete) resetCrop()
+  }, [resetCrop])
 
   const confirm = async () => {
-    if (!current || !area) return
+    const image = imgRef.current
+    if (!current || !image || !crop?.width || !crop.height) return
+    const selection = convertToPixelCrop(crop, image.width, image.height)
+    if (!selection.width || !selection.height) return
     setSaving(true)
     try {
-      const cropped = await cropImageToDataUrl(current, area, maxSize)
+      const cropped = await cropImageToDataUrl(current, toSourceArea(image, selection, aspect), maxSize)
       const next = [...done, cropped]
       if (isLast) {
         onComplete(next)
@@ -181,7 +174,7 @@ export function ImageCropperDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="scrollbar-tw max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
             {title}
@@ -193,133 +186,57 @@ export function ImageCropperDialog({
           </DialogTitle>
           <DialogDescription>
             {description ??
-              'Drag to reposition, pull a corner to resize the crop, and zoom to fill it.'}
+              (aspect == null
+                ? 'Drag a box over the part you want to keep — any size or shape.'
+                : 'Drag a box over the part you want to keep. The ratio stays locked as you resize.')}
           </DialogDescription>
         </DialogHeader>
 
-        {/* react-easy-crop fills its nearest positioned ancestor, so the frame
-            needs an explicit height. */}
-        <div
-          ref={frameRef}
-          className="relative h-72 w-full overflow-hidden rounded-lg bg-muted sm:h-96"
-        >
+        <div className="flex min-h-48 w-full items-center justify-center overflow-hidden rounded-lg bg-muted p-2">
           {current && (
-            <Cropper
-              image={current}
+            <ReactCrop
               crop={crop}
-              zoom={zoom}
-              // cropSize wins once the frame is measured; aspect covers the first
-              // paint before that happens.
-              aspect={aspect}
-              cropSize={cropSize}
-              minZoom={MIN_ZOOM}
-              maxZoom={MAX_ZOOM}
-              restrictPosition
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onMediaLoaded={({ width, height }) => setMedia({ width, height })}
-              onCropComplete={(_, pixels) => setArea(pixels)}
-            />
-          )}
-
-          {/* Resize handles, laid over the crop box. Only the handles capture
-              pointer events — everywhere else still drags the image. */}
-          {cropSize && (
-            <div className="pointer-events-none absolute inset-0 z-10">
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                style={{ width: cropSize.width, height: cropSize.height }}
-              >
-                {CORNERS.map((corner) => (
-                  <div
-                    key={corner.id}
-                    role="slider"
-                    aria-label="Resize crop"
-                    aria-valuemin={Math.round(MIN_CROP_SCALE * 100)}
-                    aria-valuemax={100}
-                    aria-valuenow={Math.round(cropScale * 100)}
-                    tabIndex={-1}
-                    onPointerDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      e.currentTarget.setPointerCapture(e.pointerId)
-                      resizingRef.current = true
-                      resizeToPointer(e.clientX, e.clientY)
-                    }}
-                    onPointerMove={(e) => {
-                      if (!resizingRef.current) return
-                      resizeToPointer(e.clientX, e.clientY)
-                    }}
-                    onPointerUp={(e) => {
-                      resizingRef.current = false
-                      e.currentTarget.releasePointerCapture(e.pointerId)
-                    }}
-                    onPointerCancel={() => {
-                      resizingRef.current = false
-                    }}
-                    className={`pointer-events-auto absolute size-7 touch-none ${corner.position}`}
-                    style={{ cursor: corner.cursor }}
-                  >
-                    <div
-                      className={`absolute inset-1.5 border-white/95 drop-shadow ${corner.edges}`}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
+              aspect={aspect ?? undefined}
+              minWidth={MIN_CROP_PX}
+              minHeight={MIN_CROP_PX}
+              // Without this a click outside the box clears the selection and
+              // leaves nothing to export.
+              keepSelection
+              ruleOfThirds
+              onChange={(_, percentCrop) => setCrop(percentCrop)}
+              className="max-w-full"
+            >
+              <img
+                ref={imgRef}
+                src={current}
+                alt="Crop preview"
+                // Contained so the whole frame is reachable on any screen; the
+                // export reads from the source image, so this costs no quality.
+                className="max-h-[50vh] w-auto max-w-full select-none object-contain"
+                onLoad={resetCrop}
+              />
+            </ReactCrop>
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <ZoomOut className="size-4 shrink-0 text-muted-foreground" />
-            <input
-              type="range"
-              aria-label="Zoom"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
-              step={0.01}
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-            />
-            <ZoomIn className="size-4 shrink-0 text-muted-foreground" />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Reset crop"
-              title="Reset"
-              onClick={resetView}
-            >
-              <RotateCcw className="size-4" />
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Minimize2 className="size-4 shrink-0 text-muted-foreground" />
-            <input
-              type="range"
-              aria-label="Crop size"
-              min={MIN_CROP_SCALE}
-              max={1}
-              step={0.01}
-              value={cropScale}
-              onChange={(e) => setCropScale(Number(e.target.value))}
-              disabled={!maxCrop}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-            />
-            <Maximize2 className="size-4 shrink-0 text-muted-foreground" />
-            {/* Spacer keeps both sliders the same length as the row above. */}
-            <div className="size-9 shrink-0" aria-hidden />
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {aspect === 16 / 9
+              ? 'Locked to 16:9'
+              : aspect === 1
+                ? 'Locked to a square'
+                : 'Free size — drag the corners or edges'}
+          </p>
+          <Button type="button" variant="ghost" size="sm" onClick={resetCrop}>
+            <RotateCcw className="size-4" /> Reset
+          </Button>
         </div>
 
         <DialogFooter className="pt-2">
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" onClick={confirm} disabled={!area || saving}>
+          <Button type="button" onClick={confirm} disabled={!crop?.width || saving}>
             {isLast ? 'Use image' : 'Next image'}
           </Button>
         </DialogFooter>

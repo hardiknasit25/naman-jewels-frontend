@@ -3,6 +3,7 @@ import type { ColDef } from 'ag-grid-community'
 import { toast } from 'sonner'
 import { Plus, Pencil, Ban, CheckCircle2, LogOut, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -11,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CustomerFormDialog } from '@/features/customers/CustomerFormDialog'
 import { ApproveDialog } from '@/features/customers/ApproveDialog'
+import { useUrlState } from '@/hooks/useUrlState'
 import { formatDateTime } from '@/lib/format'
 import {
   useDeleteCustomerMutation,
@@ -41,11 +43,23 @@ export function CustomersPage() {
   const [editing, setEditing] = useState<Customer | undefined>()
   const [approving, setApproving] = useState<Customer | undefined>()
   const [toDelete, setToDelete] = useState<Customer | undefined>()
+  // Which tab is open is part of the view, so it survives a refresh too.
+  const [tab, setTab] = useUrlState('tab', 'approved')
 
   const typeName = useMemo(() => {
     const m = new Map((types ?? []).map((t) => [t.id, t.name]))
     return (id: Id | null) => (id != null ? m.get(id) ?? '—' : '—')
   }, [types])
+
+  const typeFilterOptions = useMemo(
+    () =>
+      (types ?? []).map((t) => ({
+        value: t.name,
+        label: t.name,
+        node: <Badge variant="secondary">{t.name}</Badge>,
+      })),
+    [types]
+  )
 
   const approved = useMemo(
     () => (customers ?? []).filter((c) => c.status === 'active' || c.status === 'blocked'),
@@ -94,11 +108,20 @@ export function CustomersPage() {
         colId: 'type',
         valueGetter: (p) => typeName(p.data?.customerTypeId ?? null),
         cellRenderer: (p: { value: string }) => <Badge variant="secondary">{p.value}</Badge>,
+        ...optionsFilter<Customer>(typeFilterOptions, 'All types'),
       },
       {
         headerName: 'Status',
         field: 'status',
         cellRenderer: (p: { data: Customer }) => <StatusBadge status={p.data.status} />,
+        // This grid only ever holds approved customers, so those are the choices.
+        ...optionsFilter<Customer>(
+          [
+            { value: 'active', label: 'Active', node: <StatusBadge status="active" /> },
+            { value: 'blocked', label: 'Blocked', node: <StatusBadge status="blocked" /> },
+          ],
+          'All statuses'
+        ),
       },
       {
         headerName: 'Last Login',
@@ -139,7 +162,7 @@ export function CustomersPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [typeName]
+    [typeName, typeFilterOptions]
   )
 
   const pendingColumns = useMemo<ColDef<Customer>[]>(
@@ -196,7 +219,11 @@ export function CustomersPage() {
         }
       />
 
-      <Tabs defaultValue="approved" className="flex min-h-0 flex-1 flex-col">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(String(value))}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <TabsList>
           <TabsTrigger
             value="approved"
@@ -212,12 +239,26 @@ export function CustomersPage() {
           </TabsTrigger>
         </TabsList>
 
+        {/* Distinct state keys: both grids are on one page, so they need separate
+            query params or one would overwrite the other's search and filters. */}
         <TabsContent value="approved" className="mt-3 flex min-h-0 flex-1 flex-col">
-          <DataGrid rowData={approved} columnDefs={approvedColumns} loading={isLoading} />
+          <DataGrid
+            stateKey="approved"
+            searchPlaceholder="Search customers…"
+            rowData={approved}
+            columnDefs={approvedColumns}
+            loading={isLoading}
+          />
         </TabsContent>
 
         <TabsContent value="pending" className="mt-3 flex min-h-0 flex-1 flex-col">
-          <DataGrid rowData={pending} columnDefs={pendingColumns} loading={isLoading} />
+          <DataGrid
+            stateKey="pending"
+            searchPlaceholder="Search registrations…"
+            rowData={pending}
+            columnDefs={pendingColumns}
+            loading={isLoading}
+          />
         </TabsContent>
       </Tabs>
 

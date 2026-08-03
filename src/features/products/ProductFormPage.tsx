@@ -33,7 +33,8 @@ import { audienceFor, sortTiers } from '@/lib/tiers'
 import type { CustomerType, Id, Product, ProductStatus } from '@/types'
 
 const schema = z.object({
-  name: z.string().min(1, 'Name is required'),
+  // Optional: left blank, the product takes the name of its category on submit.
+  name: z.string().optional(),
   sku: z.string().min(1, 'Product Code / SKU is required'),
   grossWeight: z.number({ message: 'Enter a valid weight in grams' }).positive('Enter a valid weight in grams'),
   netWeight: z.string().optional(),
@@ -43,8 +44,12 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-/** Product images are cropped square so the customer app's grid stays even. */
-const PRODUCT_ASPECT = 1
+/**
+ * Product images crop freely — `null` lets the admin cut any rectangle rather
+ * than forcing the piece into a square. The customer app's tiles size the image
+ * to fit, so mixed ratios still line up.
+ */
+const PRODUCT_ASPECT = null
 
 /** Round to milligrams — floating point sums of 0.001-precision inputs drift. */
 const round3 = (n: number) => Math.round(n * 1000) / 1000
@@ -169,6 +174,12 @@ export function ProductFormPage() {
   const [images, setImages] = useState<string[]>([])
   const [status, setStatus] = useState<ProductStatus>('live')
   const [customerTypeIds, setCustomerTypeIds] = useState<Id[]>([])
+  // Name of the selected category — the fallback for an empty product name, so a
+  // piece is never saved untitled.
+  const categoryLabel = useMemo(
+    () => categoryOptions.find((o) => o.value === categoryId)?.label ?? '',
+    [categoryOptions, categoryId]
+  )
   // Itemized "less weight" breakdown. Weight kept as a string while editing so the
   // input can be empty / mid-typed; converted to a number on submit.
   const [lessFactors, setLessFactors] = useState<{ label: string; weight: string }[]>([])
@@ -389,8 +400,15 @@ export function ProductFormPage() {
       toast.error(netError)
       return
     }
+    // Blank name → use the category ("Rings", "Bangles"), which is how most of
+    // the catalogue is described anyway.
+    const name = values.name?.trim() || categoryLabel
+    if (!name) {
+      toast.error('Enter a product name — the selected category has no name to fall back on')
+      return
+    }
     const payload = {
-      name: values.name,
+      name,
       sku: values.sku,
       categoryId: Number(categoryId),
       caratId: Number(caratId),
@@ -448,8 +466,8 @@ export function ProductFormPage() {
           <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>
         </h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Drag &amp; drop or click a slot to upload. Each image is cropped square, and
-          the first one is used as the main thumbnail.
+          Drag &amp; drop or click a slot to upload. Crop each image to any shape you
+          like — the first one is used as the main thumbnail.
         </p>
       </div>
       <div
@@ -579,8 +597,22 @@ export function ProductFormPage() {
               description="What the piece is and where it sits in the catalogue."
             >
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Product Name" htmlFor="p-name" error={errors.name?.message}>
-                  <Input id="p-name" {...register('name')} />
+                <Field
+                  label="Product Name"
+                  htmlFor="p-name"
+                  optional
+                  error={errors.name?.message}
+                  hint={
+                    categoryLabel
+                      ? `Leave blank to use the category name — "${categoryLabel}".`
+                      : 'Leave blank to use the category name.'
+                  }
+                >
+                  <Input
+                    id="p-name"
+                    placeholder={categoryLabel || undefined}
+                    {...register('name')}
+                  />
                 </Field>
                 <Field label="Product Code / SKU" htmlFor="p-sku" error={errors.sku?.message}>
                   <Input id="p-sku" placeholder="e.g. RG-1042" {...register('sku')} />
@@ -779,6 +811,7 @@ export function ProductFormPage() {
         onComplete={onCropDone}
         onCancel={onCropCancel}
         title={recropIndex != null ? 'Re-crop image' : 'Crop product image'}
+        description="Drag a box over the part you want to keep, then pull its corners or edges to any size and shape."
       />
     </form>
   )

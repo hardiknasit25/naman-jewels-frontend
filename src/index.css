@@ -167,6 +167,28 @@ body,
   justify-content: center;
 }
 
+/* --- AG Grid: the bits the Theming API can't reach (see gridTheme.ts) ----- */
+
+/* Filter popups hold a shadcn panel that brings its own padding and radius, so
+   AG Grid's wrapper only needs to supply the surface. */
+.ag-filter,
+.ag-filter-wrapper,
+.ag-filter-body-wrapper {
+  padding: 0;
+}
+
+/* Pagination reads as a footer toolbar rather than a strip of grey text. */
+.ag-paging-panel {
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+.ag-paging-panel .ag-paging-number,
+.ag-paging-panel .ag-paging-row-summary-panel-number {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
 /* Themed scrollbars for AG Grid's internal scroll viewports. */
 .ag-root-wrapper {
   scrollbar-width: thin;

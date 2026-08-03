@@ -186,7 +186,13 @@ export function CustomerTypesTab() {
         </Button>
       </div>
 
-      <DataGrid rowData={rows} columnDefs={columns} loading={isLoading} />
+      <DataGrid
+        stateKey="tiers"
+        searchPlaceholder="Search tiers…"
+        rowData={rows}
+        columnDefs={columns}
+        loading={isLoading}
+      />
 
       <TypeFormDialog open={formOpen} onOpenChange={setFormOpen} record={editing} />
 

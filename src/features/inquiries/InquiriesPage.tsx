@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Eye, CheckCheck, MessageCircleReply } from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -172,7 +173,6 @@ export function InquiriesPage() {
   const [editing, setEditing] = useState<Inquiry | undefined>()
   const [viewing, setViewing] = useState<Inquiry | undefined>()
   const [toDelete, setToDelete] = useState<Inquiry | undefined>()
-  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   const customerName = useMemo(() => {
     const m = new Map((customers ?? []).map((c) => [c.id, c.companyName]))
@@ -189,12 +189,6 @@ export function InquiriesPage() {
       productOptions: (products ?? []).map((p) => ({ value: String(p.id), label: `${p.name} (${p.sku})` })),
     }),
     [customers, products]
-  )
-
-  const rows = useMemo(
-    () =>
-      (inquiries ?? []).filter((i) => statusFilter === 'all' || i.status === statusFilter),
-    [inquiries, statusFilter]
   )
 
   const setStatus = async (i: Inquiry, status: InquiryStatus) => {
@@ -225,6 +219,21 @@ export function InquiriesPage() {
           <Badge variant="ghost" className={statusClass[p.data.status]}>
             {p.data.status}
           </Badge>
+        ),
+        // Replaces the standalone status dropdown this page used to carry above
+        // the grid — same four choices, now in the filter row with everything
+        // else, and pickable in combination.
+        ...optionsFilter<Inquiry>(
+          STATUSES.map((s) => ({
+            value: s,
+            label: s,
+            node: (
+              <Badge variant="ghost" className={statusClass[s]}>
+                {s}
+              </Badge>
+            ),
+          })),
+          'All statuses'
         ),
       },
       {
@@ -278,15 +287,13 @@ export function InquiriesPage() {
         }
       />
 
-      <div className="w-full sm:w-56">
-        <SelectField
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          options={[{ value: 'all', label: 'All statuses' }, ...STATUSES.map((s) => ({ value: s, label: s }))]}
-        />
-      </div>
-
-      <DataGrid rowData={rows} columnDefs={columns} loading={isLoading} />
+      <DataGrid
+        stateKey="inquiries"
+        searchPlaceholder="Search inquiries…"
+        rowData={inquiries}
+        columnDefs={columns}
+        loading={isLoading}
+      />
 
       <InquiryFormDialog open={formOpen} onOpenChange={setFormOpen} record={editing} lookup={lookup} />
 

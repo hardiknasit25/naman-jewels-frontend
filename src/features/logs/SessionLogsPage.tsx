@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
+import { optionsFilter } from '@/components/data/gridFilters'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime } from '@/lib/format'
@@ -32,6 +33,30 @@ export function SessionLogsPage() {
         headerName: 'Status',
         field: 'active',
         maxWidth: 130,
+        // The cell value is the raw boolean, so the option values match it as text.
+        ...optionsFilter<SessionLog>(
+          [
+            {
+              value: 'true',
+              label: 'Active',
+              node: (
+                <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  Active
+                </Badge>
+              ),
+            },
+            {
+              value: 'false',
+              label: 'Ended',
+              node: (
+                <Badge variant="ghost" className="bg-muted text-muted-foreground">
+                  Ended
+                </Badge>
+              ),
+            },
+          ],
+          'All statuses'
+        ),
         cellRenderer: (p: { data: SessionLog }) =>
           p.data.active ? (
             <Badge variant="ghost" className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">Active</Badge>
@@ -46,7 +71,13 @@ export function SessionLogsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader title="Session Logs" description="Login sessions across the admin panel." />
-      <DataGrid rowData={logs} columnDefs={columns} loading={isLoading} />
+      <DataGrid
+        stateKey="sessions"
+        searchPlaceholder="Search sessions…"
+        rowData={logs}
+        columnDefs={columns}
+        loading={isLoading}
+      />
     </div>
   )
 }
