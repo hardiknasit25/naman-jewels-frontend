@@ -164,7 +164,20 @@ export function ProductsPage() {
         valueGetter: (p) => caratName(p.data),
         ...optionsFilter<Product>(caratFilterOptions, 'All carats'),
       },
+      // Ordered as the calculation runs: Gross − Less = Net.
       { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130 },
+      {
+        // Less weight = gross − net, rounded to kill float noise. Same rule the
+        // customer app uses; only meaningful once a net weight exists.
+        headerName: 'Less (gm)',
+        colId: 'lessWeight',
+        maxWidth: 130,
+        valueGetter: (p) =>
+          p.data?.netWeight != null
+            ? Number((p.data.grossWeight - p.data.netWeight).toFixed(3))
+            : null,
+        valueFormatter: (p) => (p.value != null ? p.value : '—'),
+      },
       { headerName: 'Net (gm)', field: 'netWeight', maxWidth: 120, valueFormatter: (p) => (p.value != null ? p.value : '—') },
       { headerName: 'Size', field: 'size', valueFormatter: (p) => p.value || '—' },
       { headerName: 'Created', field: 'createdAt', valueFormatter: (p) => formatDate(p.value) },

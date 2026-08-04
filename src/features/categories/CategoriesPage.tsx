@@ -187,8 +187,8 @@ function CategoryFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={adding || updating}>
-              {record ? 'Save' : 'Add'}
+            <Button type="submit" loading={adding || updating}>
+              {adding || updating ? 'Saving…' : record ? 'Save' : 'Add'}
             </Button>
           </DialogFooter>
         </form>

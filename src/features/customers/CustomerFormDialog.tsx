@@ -192,8 +192,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={adding || updating}>
-              {isEdit ? 'Save Changes' : 'Add Customer'}
+            <Button type="submit" loading={adding || updating}>
+              {adding || updating ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Customer'}
             </Button>
           </DialogFooter>
         </form>

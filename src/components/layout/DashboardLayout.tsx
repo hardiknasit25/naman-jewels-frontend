@@ -48,10 +48,14 @@ function DesktopSidebar() {
 
   return (
     <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r bg-sidebar py-4 md:flex">
+      {/* Percentage radius so the mark rounds identically at both the sizes it's
+          rendered at (36px here, 24px in the mobile header). 28% sits close to
+          the nav items' 35% without cutting into the artwork's gold border,
+          which a deeper clip starts to slice through at the corners. */}
       <img
         src={mark}
         alt="Naman Jewels"
-        className="mb-4 size-9 object-contain"
+        className="mb-4 size-9 rounded-[28%] object-contain"
       />
       <nav className="flex flex-col items-center gap-1">
         {navItems.map((item) => (
@@ -170,7 +174,7 @@ export function DashboardLayout() {
             <Menu className="size-5" />
           </Button>
           <span className="flex items-center gap-2 font-heading text-sm font-semibold">
-            <img src={mark} alt="" className="size-6 object-contain" />
+            <img src={mark} alt="" className="size-6 rounded-[28%] object-contain" />
             Naman Jewels
           </span>
 

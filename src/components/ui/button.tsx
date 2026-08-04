@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2Icon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -42,13 +43,38 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  loading,
+  disabled,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /** Show a spinner and block interaction while an action is in flight. */
+    loading?: boolean
+  }) {
+  // `children` is deliberately left inside `props`: when not loading this
+  // renders exactly as it did before, which matters because Button is also used
+  // as a `render` target (menus, dialogs, tooltips) whose children are injected
+  // by the parent primitive. Only a loading button rewrites its own children.
+  const spinner =
+    loading && typeof props.children !== "function"
+      ? {
+          children: (
+            <>
+              <Loader2Icon className="animate-spin" />
+              {props.children}
+            </>
+          ),
+        }
+      : null
+
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
+      {...spinner}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
     />
   )
 }

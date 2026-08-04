@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import logo from "@/assets/naman_jewels_logo.png";
-import mark from "@/assets/naman_jewels_mark.png";
+import brandTexture from "@/assets/brand-texture.png";
 
 const schema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
@@ -61,8 +61,19 @@ export function LoginPage() {
         <ThemeToggle />
       </div>
 
-      {/* Brand sidebar — shown on large screens only. */}
-      <aside className="hidden w-1/2 flex-col items-center justify-center bg-linear-to-br from-zinc-900 via-zinc-950 to-black p-12 lg:flex">
+      {/* Brand sidebar — shown on large screens only. Background is the logo
+          artwork's own green plus a seamless tile of its grain, sampled from the
+          artwork itself, so the logo blends into the panel instead of sitting on it.
+          The colour is also set in CSS, so the panel still matches if the tile
+          hasn't loaded. */}
+      <aside
+        className="hidden w-1/2 flex-col items-center justify-center bg-[#00221b] p-12 lg:flex"
+        style={{
+          backgroundImage: `url(${brandTexture})`,
+          backgroundSize: "400px 400px",
+          backgroundRepeat: "repeat",
+        }}
+      >
         <img
           src={logo}
           alt="Naman Jewels"
@@ -74,11 +85,6 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center bg-muted/30 p-4">
         <Card className="w-full max-w-sm">
         <CardHeader>
-          <img
-            src={mark}
-            alt="Naman Jewels"
-            className="mb-2 size-12 object-contain"
-          />
           <CardTitle>Naman Jewels Admin</CardTitle>
           <CardDescription>
             Sign in to continue to your dashboard.
@@ -128,9 +134,9 @@ export function LoginPage() {
             <Button
               type="submit"
               className="mt-1 w-full"
-              disabled={isSubmitting}
+              loading={isSubmitting}
             >
-              Sign in
+              {isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </CardContent>

@@ -12,13 +12,14 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Plus, ImageIcon, X, Crop as CropIcon } from 'lucide-react'
+import { ArrowLeft, Plus, ImageIcon, X, Crop as CropIcon, Loader2Icon } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Field } from '@/components/shared/Field'
 import { SelectField } from '@/components/shared/SelectField'
 import { ImageCropperDialog } from '@/components/shared/ImageCropperDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { fileToDataUrl } from '@/lib/cropImage'
 import {
@@ -441,6 +442,62 @@ export function ProductFormPage() {
     }
   }
 
+  // Editing: the form is populated by a reset() once the record arrives, so
+  // without this the admin stares at a blank form and can't tell whether it's
+  // still loading or the product genuinely has no values.
+  if (isEdit && productsLoading) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4" aria-busy="true">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={goBack}
+            aria-label="Back to Products"
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+          <div>
+            <h1 className="font-heading text-xl font-semibold sm:text-2xl">Edit Product</h1>
+            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2Icon className="size-3.5 animate-spin" />
+              Loading product…
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          <div className="order-2 flex flex-col gap-4 lg:order-1 lg:min-w-0 lg:flex-1">
+            {Array.from({ length: 3 }).map((_, section) => (
+              <div key={section} className="rounded-xl border bg-card p-4 shadow-sm sm:p-6">
+                <Skeleton className="h-5 w-40 rounded-md" />
+                <Skeleton className="mt-2 h-4 w-64 rounded-md" />
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, field) => (
+                    <div key={field}>
+                      <Skeleton className="h-4 w-24 rounded-md" />
+                      <Skeleton className="mt-2 h-9 w-full rounded-lg" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="order-1 flex w-full flex-col rounded-xl border bg-card p-4 shadow-sm sm:p-6 lg:order-2 lg:w-90 lg:shrink-0 xl:w-105">
+            <Skeleton className="h-5 w-36 rounded-md" />
+            <Skeleton className="mt-2 h-4 w-full rounded-md" />
+            <div className="mt-4 flex flex-wrap gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="aspect-square w-24 rounded-lg" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Edit route pointing at a product that doesn't exist (bad id / deleted).
   if (isEdit && !productsLoading && !record) {
     return (
@@ -597,23 +654,6 @@ export function ProductFormPage() {
               description="What the piece is and where it sits in the catalogue."
             >
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Product Name"
-                  htmlFor="p-name"
-                  optional
-                  error={errors.name?.message}
-                  hint={
-                    categoryLabel
-                      ? `Leave blank to use the category name — "${categoryLabel}".`
-                      : 'Leave blank to use the category name.'
-                  }
-                >
-                  <Input
-                    id="p-name"
-                    placeholder={categoryLabel || undefined}
-                    {...register('name')}
-                  />
-                </Field>
                 <Field label="Product Code / SKU" htmlFor="p-sku" error={errors.sku?.message}>
                   <Input id="p-sku" placeholder="e.g. RG-1042" {...register('sku')} />
                 </Field>
@@ -778,6 +818,33 @@ export function ProductFormPage() {
                 <TierPicker tiers={tiers} value={customerTypeIds} onChange={setCustomerTypeIds} />
               </Field>
             </Section>
+
+            {/* Last, deliberately: the name defaults to the category, so it reads
+                better once the category above has actually been chosen. */}
+            <Section
+              title="Product Name"
+              description="What this piece is called in the catalogue. Optional — it falls back to the category."
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Product Name"
+                  htmlFor="p-name"
+                  optional
+                  error={errors.name?.message}
+                  hint={
+                    categoryLabel
+                      ? `Leave blank to use the category name — "${categoryLabel}".`
+                      : 'Leave blank to use the category name.'
+                  }
+                >
+                  <Input
+                    id="p-name"
+                    placeholder={categoryLabel || undefined}
+                    {...register('name')}
+                  />
+                </Field>
+              </div>
+            </Section>
           </div>
 
           {/* Images — fixed-width block on the right on laptops, sticky so it stays
@@ -799,8 +866,14 @@ export function ProductFormPage() {
           <Button type="button" variant="outline" onClick={goBack} className="max-sm:flex-1">
             Cancel
           </Button>
-          <Button type="submit" disabled={adding || updating} className="max-sm:flex-1">
-            {isEdit ? 'Save Changes' : 'Add Product'}
+          <Button type="submit" loading={adding || updating} className="max-sm:flex-1">
+            {adding || updating
+              ? isEdit
+                ? 'Saving…'
+                : 'Adding…'
+              : isEdit
+                ? 'Save Changes'
+                : 'Add Product'}
           </Button>
         </div>
       </div>

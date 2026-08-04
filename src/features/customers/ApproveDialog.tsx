@@ -68,8 +68,8 @@ export function ApproveDialog({ open, onOpenChange, customer, customerTypes }: P
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={approve} disabled={isLoading}>
-            Approve
+          <Button onClick={approve} loading={isLoading}>
+            {isLoading ? 'Approving…' : 'Approve'}
           </Button>
         </DialogFooter>
       </DialogContent>

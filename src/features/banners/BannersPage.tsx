@@ -167,8 +167,8 @@ function BannerFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={adding || updating}>
-              {record ? 'Save Changes' : 'Add Banner'}
+            <Button type="submit" loading={adding || updating}>
+              {adding || updating ? 'Saving…' : record ? 'Save Changes' : 'Add Banner'}
             </Button>
           </DialogFooter>
         </form>

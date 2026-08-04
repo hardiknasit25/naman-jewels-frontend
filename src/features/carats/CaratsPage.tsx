@@ -139,8 +139,8 @@ function CaratFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={adding || updating}>
-              {record ? 'Save Changes' : 'Add Carat'}
+            <Button type="submit" loading={adding || updating}>
+              {adding || updating ? 'Saving…' : record ? 'Save Changes' : 'Add Carat'}
             </Button>
           </DialogFooter>
         </form>

@@ -95,8 +95,9 @@ export function PagesPage() {
                 <Button variant="outline" onClick={() => setPreviewOpen(true)}>
                   <Eye className="size-4" /> Preview
                 </Button>
-                <Button onClick={save} disabled={!dirty || saving}>
-                  <Save className="size-4" /> Save
+                <Button onClick={save} disabled={!dirty} loading={saving}>
+                  {!saving && <Save className="size-4" />}
+                  {saving ? 'Saving…' : 'Save'}
                 </Button>
               </div>
             </div>

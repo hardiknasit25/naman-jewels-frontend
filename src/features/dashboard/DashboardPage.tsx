@@ -8,6 +8,7 @@ import { Donut } from '@/components/charts/Donut'
 import { colorAt } from '@/components/charts/colors'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { formatDateTime } from '@/lib/format'
 import {
   useListBannersQuery,
@@ -46,12 +47,22 @@ function ChartCard({
 }
 
 export function DashboardPage() {
-  const { data: customers = [] } = useListCustomersQuery()
-  const { data: types = [] } = useListCustomerTypesQuery()
-  const { data: categories = [] } = useListCategoriesQuery()
-  const { data: products = [] } = useListProductsQuery()
-  const { data: inquiries = [] } = useListInquiriesQuery()
-  const { data: banners = [] } = useListBannersQuery()
+  const { data: customers = [], isLoading: loadingCustomers } = useListCustomersQuery()
+  const { data: types = [], isLoading: loadingTypes } = useListCustomerTypesQuery()
+  const { data: categories = [], isLoading: loadingCategories } = useListCategoriesQuery()
+  const { data: products = [], isLoading: loadingProducts } = useListProductsQuery()
+  const { data: inquiries = [], isLoading: loadingInquiries } = useListInquiriesQuery()
+  const { data: banners = [], isLoading: loadingBanners } = useListBannersQuery()
+
+  // Every tile on this page is derived from all six lists, so a partial load
+  // would render believable-looking zeros. Hold the whole page until they land.
+  const loading =
+    loadingCustomers ||
+    loadingTypes ||
+    loadingCategories ||
+    loadingProducts ||
+    loadingInquiries ||
+    loadingBanners
 
   const m = useMemo(() => {
     const categoryById = new Map(categories.map((c) => [c.id, c.name]))
@@ -122,6 +133,81 @@ export function DashboardPage() {
     () => [...banners].filter((b) => b.active).sort((a, b) => a.order - b.order),
     [banners]
   )
+
+  // Skeleton mirrors the real layout, so the page doesn't jump when data lands.
+  if (loading) {
+    return (
+      <div className="scrollbar-tw flex h-full flex-col gap-6 overflow-y-auto" aria-busy="true">
+        <PageHeader title="Dashboard" description="Overview of inquiries, products and customers." />
+        <span className="sr-only" role="status">
+          Loading dashboard…
+        </span>
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="overflow-hidden">
+              <CardContent className="flex items-center gap-4 p-4">
+                <Skeleton className="size-11 shrink-0 rounded-xl" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-7 w-16 rounded-md" />
+                  <Skeleton className="mt-2 h-4 w-24 rounded-md" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ChartCard title="Inquiries Over Time" className="lg:col-span-2">
+            <Skeleton className="h-56 w-full" />
+          </ChartCard>
+          <ChartCard title="Users by Customer Type">
+            <Skeleton className="h-56 w-full" />
+          </ChartCard>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {['Inquiries by Category', 'Inquiries by Customer Type', 'Top Inquired Products'].map(
+            (title) => (
+              <ChartCard key={title} title={title}>
+                <div className="flex flex-col gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-6 w-full rounded-md" />
+                  ))}
+                </div>
+              </ChartCard>
+            )
+          )}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ChartCard title="Recent Inquiries" className="lg:col-span-2">
+            <div className="flex flex-col gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-40 rounded-md" />
+                    <Skeleton className="mt-2 h-3 w-24 rounded-md" />
+                  </div>
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+          <ChartCard title="Active Home Banners">
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-20 shrink-0 rounded-md" />
+                  <Skeleton className="h-4 w-28 rounded-md" />
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="scrollbar-tw flex h-full flex-col gap-6 overflow-y-auto">
