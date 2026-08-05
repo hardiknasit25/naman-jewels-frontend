@@ -19,19 +19,37 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Draw the selected crop rectangle to a canvas and re-encode it as a JPEG data URL.
- *
- * Re-encoding is deliberate: uploads are stored as Base64 in the database, and a
- * raw phone photo is several megabytes. Capping the longest edge at `maxSize` and
- * exporting JPEG keeps product payloads small enough for the customer app to load.
- * Transparency is flattened onto white since JPEG has no alpha channel.
+ * Whether this browser's canvas can export WebP. Chrome, Edge, Firefox and
+ * Safari 16.4+ all can; anything older silently hands back a PNG data URL from
+ * toDataURL, which is how this check spots it. Cached — the answer can't change
+ * while the page is open.
  */
-export async function cropImageToDataUrl(
+let webpSupport: boolean | null = null
+function supportsWebp(): boolean {
+  if (webpSupport == null) {
+    const probe = document.createElement('canvas')
+    probe.width = 1
+    probe.height = 1
+    webpSupport = probe.toDataURL('image/webp').startsWith('data:image/webp')
+  }
+  return webpSupport
+}
+
+/**
+ * Draw the selected crop rectangle to a canvas and re-encode it as a WebP (or
+ * JPEG) blob, ready to POST to /api/uploads.
+ *
+ * Re-encoding is deliberate: a raw phone photo is several megabytes. Capping the
+ * longest edge at `maxSize` and exporting WebP at q0.85 gives roughly a quarter
+ * less weight than the equivalent JPEG at the same visible quality. Transparency
+ * is flattened onto white — neither format is used here with an alpha channel.
+ */
+export async function cropImageToBlob(
   src: string,
   crop: CropArea,
-  maxSize = 1200,
+  maxSize = 1600,
   quality = 0.85
-): Promise<string> {
+): Promise<Blob> {
   const image = await loadImage(src)
 
   // Never upscale — a small source stays at its own size.
@@ -50,7 +68,14 @@ export async function cropImageToDataUrl(
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height)
 
-  return canvas.toDataURL('image/jpeg', quality)
+  const type = supportsWebp() ? 'image/webp' : 'image/jpeg'
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode the image'))),
+      type,
+      quality
+    )
+  })
 }
 
 /** Read a picked File into a data URL the cropper can display. */

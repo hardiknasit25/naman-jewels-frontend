@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/responsive-dialog'
 import { formatDate } from '@/lib/format'
 import { fileToDataUrl } from '@/lib/cropImage'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import {
   useAddBannerMutation,
   useDeleteBannerMutation,
@@ -121,7 +122,7 @@ function BannerFormDialog({
           <Field label="Banner Image">
             <div className="flex flex-col gap-2">
               {imageUrl ? (
-                <img src={imageUrl} alt="Banner preview" className="h-28 w-full rounded-lg border object-cover" />
+                <img src={resolveImageUrl(imageUrl)} alt="Banner preview" className="h-28 w-full rounded-lg border object-cover" />
               ) : (
                 <div className="flex h-28 w-full items-center justify-center rounded-lg border bg-muted text-muted-foreground">
                   <ImageIcon className="size-7" />
@@ -224,7 +225,7 @@ export function BannersPage() {
         headerClass: 'nj-center-header',
         cellRenderer: (p: { data: Banner }) => (
           <div className="flex h-full w-full items-center justify-center">
-            <img src={p.data.imageUrl} alt={p.data.title} className="h-10 w-24 rounded-md object-cover ring-1 ring-border" />
+            <img src={resolveImageUrl(p.data.imageUrl)} alt={p.data.title} className="h-10 w-24 rounded-md object-cover ring-1 ring-border" />
           </div>
         ),
       },

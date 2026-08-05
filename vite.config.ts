@@ -31,9 +31,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
         // AG Grid + charts push individual chunks over the default 2 MiB limit.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        // Don't let the SPA navigation fallback swallow API calls —
-        // requests to /api/* must reach the Express backend.
-        navigateFallbackDenylist: [/^\/api/],
+        // Don't let the SPA navigation fallback swallow API calls or uploaded
+        // images — both must reach the Express backend.
+        navigateFallbackDenylist: [/^\/api/, /^\/uploads/],
       },
     }),
   ],
@@ -47,6 +47,12 @@ export default defineConfig({
     // Forward API calls to the Express backend during development.
     proxy: {
       '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      // Uploaded images are stored as API-relative paths, so with VITE_API_URL
+      // unset they resolve against this dev server and need forwarding too.
+      '/uploads': {
         target: 'http://localhost:3000',
         changeOrigin: true,
       },

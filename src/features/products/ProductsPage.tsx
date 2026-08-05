@@ -19,6 +19,7 @@ import {
   useListProductsQuery,
 } from '@/services/api'
 import { audienceFor } from '@/lib/tiers'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import type { Id, Product } from '@/types'
 
 export function ProductsPage() {
@@ -99,7 +100,7 @@ export function ProductsPage() {
           <div className="flex h-full w-full items-center justify-center">
             {p.data.imageUrl ? (
               <img
-                src={p.data.imageUrl}
+                src={resolveImageUrl(p.data.imageUrl)}
                 alt={p.data.name}
                 className="size-12 rounded-xl object-cover shadow-sm ring-1 ring-border transition-transform duration-150 hover:scale-105"
               />

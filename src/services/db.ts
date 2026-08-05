@@ -12,7 +12,7 @@ import type { Id, Timestamped } from '@/types'
 // the relative "/api", which in dev is proxied to the backend by Vite.
 // ---------------------------------------------------------------------------
 
-const API_ROOT = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
+export const API_ROOT = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
 export const API_BASE = `${API_ROOT}/api`
 export const TOKEN_KEY = 'njadmin:token'
 const AUTH_KEY = 'njadmin:auth'
@@ -69,6 +69,35 @@ async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
+}
+
+/**
+ * Upload one cropped image and get back the URL to store on the record.
+ *
+ * Posts the raw bytes rather than JSON: the blob comes straight off the crop
+ * canvas, and Base64-wrapping it would inflate the request by a third for no
+ * benefit. Uses fetch directly because `http()` above forces a JSON content type.
+ */
+export async function uploadImage(blob: Blob): Promise<string> {
+  const res = await fetch(`${API_BASE}/uploads`, {
+    method: 'POST',
+    headers: { 'Content-Type': blob.type, ...authHeaders() },
+    body: blob,
+  })
+
+  if (!res.ok) {
+    let message = `Upload failed (${res.status})`
+    try {
+      const body = await res.json()
+      if (body?.message) message = body.message
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message)
+  }
+
+  const { url } = (await res.json()) as { url: string }
+  return url
 }
 
 export interface Collection<T extends Timestamped> {

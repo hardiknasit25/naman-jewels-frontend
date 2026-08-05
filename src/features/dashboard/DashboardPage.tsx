@@ -18,6 +18,7 @@ import {
   useListInquiriesQuery,
   useListProductsQuery,
 } from '@/services/api'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import type { InquiryStatus } from '@/types'
 
 const statusClass: Record<InquiryStatus, string> = {
@@ -307,7 +308,7 @@ export function DashboardPage() {
                 {activeBanners.map((b) => (
                   <div key={b.id} className="flex items-center gap-3">
                     <img
-                      src={b.imageUrl}
+                      src={resolveImageUrl(b.imageUrl)}
                       alt={b.title}
                       className="h-10 w-20 shrink-0 rounded-md object-cover ring-1 ring-border"
                     />

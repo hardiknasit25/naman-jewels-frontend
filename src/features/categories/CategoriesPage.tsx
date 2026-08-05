@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/responsive-dialog'
 import { formatDate } from '@/lib/format'
 import { fileToDataUrl } from '@/lib/cropImage'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import {
   useAddCategoryMutation,
   useDeleteCategoryMutation,
@@ -134,7 +135,7 @@ function CategoryFormDialog({
             <div className="flex items-center gap-3">
               {imageUrl ? (
                 <img
-                  src={imageUrl}
+                  src={resolveImageUrl(imageUrl)}
                   alt="Category preview"
                   className="size-16 rounded-lg border object-cover"
                 />
@@ -270,7 +271,7 @@ export function CategoriesPage() {
           <div className="flex h-full w-full items-center justify-center">
             {p.data.imageUrl ? (
               <img
-                src={p.data.imageUrl}
+                src={resolveImageUrl(p.data.imageUrl)}
                 alt={p.data.name}
                 className="size-12 rounded-xl object-cover shadow-sm ring-1 ring-border"
               />

@@ -18,7 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
-import { cropImageToDataUrl, type CropArea } from '@/lib/cropImage'
+import { cropImageToBlob, type CropArea } from '@/lib/cropImage'
+import { resolveImageUrl } from '@/lib/imageUrl'
+import { uploadImage } from '@/services/db'
 
 /** Smallest crop the user may drag, in on-screen pixels. */
 const MIN_CROP_PX = 24
@@ -78,7 +80,11 @@ interface ImageCropperDialogProps {
    * a free crop where any rectangle can be drawn (products).
    */
   aspect: number | null
-  /** Cropped images, in the same order as `sources`. Fires once the queue ends. */
+  /**
+   * URLs of the uploaded images, in the same order as `sources`. Fires once the
+   * queue ends — every image is already stored on the server by then, so callers
+   * only ever handle short URLs.
+   */
   onComplete: (images: string[]) => void
   /** User backed out — nothing from this queue should be kept. */
   onCancel: () => void
@@ -93,7 +99,8 @@ interface ImageCropperDialogProps {
  *
  * Every image entering the app goes through here so tiles line up in the customer
  * app instead of inheriting whatever aspect ratio the phone camera produced. The
- * export also downsizes and re-encodes, which keeps the Base64 payloads small.
+ * export downsizes and re-encodes to WebP, then uploads — so confirming the crop
+ * yields a URL, and no caller ever handles image bytes.
  *
  * The whole image stays on screen and the user drags a selection over it: with
  * `aspect = null` that selection is any size and shape they like, and with an
@@ -157,16 +164,24 @@ export function ImageCropperDialog({
     if (!selection.width || !selection.height) return
     setSaving(true)
     try {
-      const cropped = await cropImageToDataUrl(current, toSourceArea(image, selection, aspect), maxSize)
-      const next = [...done, cropped]
+      const blob = await cropImageToBlob(
+        resolveImageUrl(current),
+        toSourceArea(image, selection, aspect),
+        maxSize
+      )
+      // Uploaded here rather than on form save: the file is stored once, and the
+      // record only ever carries its URL. The trade is that backing out of the
+      // form afterwards leaves the file on disk unreferenced.
+      const url = await uploadImage(blob)
+      const next = [...done, url]
       if (isLast) {
         onComplete(next)
       } else {
         setDone(next)
         setIndex((i) => i + 1)
       }
-    } catch {
-      toast.error('Could not crop this image')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not crop this image')
     } finally {
       setSaving(false)
     }
@@ -208,7 +223,10 @@ export function ImageCropperDialog({
             >
               <img
                 ref={imgRef}
-                src={current}
+                // Re-cropping an image already on a record hands us its stored
+                // URL, so this resolves as well as displays. The canvas export
+                // reads from here, which is why loadImage sets crossOrigin.
+                src={resolveImageUrl(current)}
                 alt="Crop preview"
                 // Contained so the whole frame is reachable on any screen; the
                 // export reads from the source image, so this costs no quality.
@@ -237,7 +255,7 @@ export function ImageCropperDialog({
             Cancel
           </Button>
           <Button type="button" onClick={confirm} disabled={!crop?.width || saving}>
-            {isLast ? 'Use image' : 'Next image'}
+            {saving ? 'Uploading…' : isLast ? 'Use image' : 'Next image'}
           </Button>
         </DialogFooter>
       </DialogContent>

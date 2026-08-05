@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { fileToDataUrl } from '@/lib/cropImage'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import {
   useAddProductMutation,
   useListCaratsQuery,
@@ -54,6 +55,16 @@ const PRODUCT_ASPECT = null
 
 /** Round to milligrams — floating point sums of 0.001-precision inputs drift. */
 const round3 = (n: number) => Math.round(n * 1000) / 1000
+
+/**
+ * A less-factor row's weight, or null when it isn't a usable number. The weight
+ * is the required half of a row — it's what the Gross − Less → Net calculation
+ * runs on — so blanks, junk and non-positive entries are all "no weight".
+ */
+const parseFactorWeight = (weight: string): number | null => {
+  const value = Number(weight.trim())
+  return weight.trim() !== '' && Number.isFinite(value) && value > 0 ? value : null
+}
 
 /**
  * One titled block of the form. The page is long enough that a single flat card
@@ -184,6 +195,10 @@ export function ProductFormPage() {
   // Itemized "less weight" breakdown. Weight kept as a string while editing so the
   // input can be empty / mid-typed; converted to a number on submit.
   const [lessFactors, setLessFactors] = useState<{ label: string; weight: string }[]>([])
+  // Row-level problems stay hidden until the first save attempt — the form opens
+  // with an empty starter row, and greeting the admin with a red error on a field
+  // they haven't touched yet reads as broken rather than helpful.
+  const [factorsTouched, setFactorsTouched] = useState(false)
 
   const addFactor = () => setLessFactors((rows) => [...rows, { label: '', weight: '' }])
   const updateFactor = (index: number, key: 'label' | 'weight', value: string) =>
@@ -291,8 +306,8 @@ export function ProductFormPage() {
     () =>
       round3(
         lessFactors.reduce((sum, row) => {
-          const weight = Number(row.weight)
-          return Number.isFinite(weight) ? sum + weight : sum
+          const weight = parseFactorWeight(row.weight)
+          return weight != null ? sum + weight : sum
         }, 0)
       ),
     [lessFactors]
@@ -320,6 +335,21 @@ export function ProductFormPage() {
       ? `Less factors total ${lessTotal} gm, which is more than the gross weight.`
       : undefined
 
+  // ----- Less factor validation ---------------------------------------------
+  // Every product carries at least one less factor, and every row needs a weight.
+  // The factor name is optional: an unnamed deduction still counts against the
+  // gross weight, which is the number the rest of the form is built on.
+  const rowsMissingWeight = useMemo(
+    () => lessFactors.map((row) => parseFactorWeight(row.weight) == null),
+    [lessFactors]
+  )
+  const lessError =
+    lessFactors.length === 0
+      ? 'Add at least one less weight factor.'
+      : rowsMissingWeight.some(Boolean)
+        ? 'Enter a weight for every factor, or remove the empty rows.'
+        : undefined
+
   // Hydrate the form once the record (edit) or category list (create) is ready.
   useEffect(() => {
     if (isEdit) {
@@ -339,7 +369,14 @@ export function ProductFormPage() {
       setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
       setStatus(record.status ?? 'live')
       setCustomerTypeIds(record.customerTypeIds ?? [])
-      setLessFactors((record.lessFactors ?? []).map((r) => ({ label: r.label, weight: String(r.weight) })))
+      // A product saved before less factors were mandatory can have none — open
+      // with an empty row so the requirement is visible and fillable in place.
+      const storedFactors = (record.lessFactors ?? []).map((r) => ({
+        label: r.label ?? '',
+        weight: String(r.weight),
+      }))
+      setLessFactors(storedFactors.length > 0 ? storedFactors : [{ label: '', weight: '' }])
+      setFactorsTouched(false)
       // A stored net that doesn't match Gross − Less was entered by hand; keep it
       // that way instead of silently recalculating it out from under the admin.
       const storedLess = round3(
@@ -357,7 +394,10 @@ export function ProductFormPage() {
       setStatus('live')
       // No tags = visible to every tier, which matches the "Public" default.
       setCustomerTypeIds([])
-      setLessFactors([])
+      // One row up front — at least one factor is required, so an empty list would
+      // just be a button the admin has to find before they can save.
+      setLessFactors([{ label: '', weight: '' }])
+      setFactorsTouched(false)
       setNetOverridden(false)
     }
   }, [isEdit, record, reset, categoryOptions, activeCaratOptions])
@@ -397,6 +437,11 @@ export function ProductFormPage() {
       toast.error('Please select a carat')
       return
     }
+    if (lessError) {
+      setFactorsTouched(true)
+      toast.error(lessError)
+      return
+    }
     if (netError) {
       toast.error(netError)
       return
@@ -415,10 +460,12 @@ export function ProductFormPage() {
       caratId: Number(caratId),
       grossWeight: values.grossWeight,
       netWeight: values.netWeight ? Number(values.netWeight) : null,
-      // Keep only complete rows (a label and a valid number), stored as numbers.
+      // The weight is what makes a row real; the label is optional and rides along
+      // as typed. Rows without a weight can't reach here — `lessError` blocks the
+      // submit above rather than dropping them silently.
       lessFactors: lessFactors
-        .map((r) => ({ label: r.label.trim(), weight: Number(r.weight) }))
-        .filter((r) => r.label.length > 0 && Number.isFinite(r.weight)),
+        .map((r) => ({ label: r.label.trim(), weight: parseFactorWeight(r.weight) }))
+        .filter((r): r is { label: string; weight: number } => r.weight != null),
       size: values.size,
       stoneDetails: values.stoneDetails,
       notes: values.notes,
@@ -543,7 +590,7 @@ export function ProductFormPage() {
           {images.map((src, i) => (
             <div key={i} className="group relative aspect-square w-24">
               <img
-                src={src}
+                src={resolveImageUrl(src)}
                 alt={`Product image ${i + 1}`}
                 className="h-full w-full rounded-lg border bg-muted/40 object-contain"
               />
@@ -620,7 +667,9 @@ export function ProductFormPage() {
 
   return (
     <form
-      onSubmit={handleSubmit(onSubmit)}
+      // The invalid branch fires when the zod fields fail, which would otherwise
+      // leave the less factors silently un-flagged on the same save attempt.
+      onSubmit={handleSubmit(onSubmit, () => setFactorsTouched(true))}
       className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto"
     >
       {/* Header: back icon + title. The Cancel / Save actions live in the sticky
@@ -694,37 +743,50 @@ export function ProductFormPage() {
 
               <Field
                 label="Less Weight Factors"
-                optional
-                hint="Itemized breakdown of the deducted (less) weight — add a row per factor (Stone, Kundan, Meena…). The total is subtracted from Gross to give the Net weight below."
+                error={factorsTouched ? lessError : undefined}
+                hint="Itemized breakdown of the deducted (less) weight — at least one row is required. Enter the weight, then name the factor (Stone, Kundan, Meena…) if you want to; the name is optional. The total is subtracted from Gross to give the Net weight below."
               >
                 <div className="grid gap-2">
-                  {lessFactors.map((row, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Input
-                        placeholder="Factor (e.g. Stone)"
-                        value={row.label}
-                        onChange={(e) => updateFactor(i, 'label', e.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        step="0.001"
-                        placeholder="Weight (gm)"
-                        value={row.weight}
-                        onChange={(e) => updateFactor(i, 'weight', e.target.value)}
-                        className="w-32"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label="Remove factor"
-                        onClick={() => removeFactor(i)}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  {/* Weight leads each row: it's the required half and the number the
+                      Net calculation runs on, so it reads first and gets tabbed first. */}
+                  {lessFactors.map((row, i) => {
+                    const missingWeight = factorsTouched && rowsMissingWeight[i]
+                    return (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="w-32 shrink-0">
+                          <Input
+                            type="number"
+                            step="0.001"
+                            placeholder="Weight (gm)"
+                            value={row.weight}
+                            onChange={(e) => updateFactor(i, 'weight', e.target.value)}
+                            aria-label={`Less factor ${i + 1} weight in grams`}
+                            aria-invalid={missingWeight || undefined}
+                            className={cn(missingWeight && 'border-destructive')}
+                          />
+                          {missingWeight && (
+                            <p className="mt-1 text-xs text-destructive">Weight required</p>
+                          )}
+                        </div>
+                        <Input
+                          placeholder="Factor (optional, e.g. Stone)"
+                          value={row.label}
+                          onChange={(e) => updateFactor(i, 'label', e.target.value)}
+                          aria-label={`Less factor ${i + 1} name`}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label="Remove factor"
+                          onClick={() => removeFactor(i)}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                    )
+                  })}
                   <div className="flex items-center justify-between gap-3">
                     <Button type="button" variant="outline" size="sm" onClick={addFactor}>
                       <Plus className="size-4" /> Add factor
