@@ -289,6 +289,8 @@ export function ProductFormPage() {
     reset,
     watch,
     setValue,
+    setError,
+    setFocus,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -428,6 +430,31 @@ export function ProductFormPage() {
 
   const goBack = () => navigate('/products')
 
+  /**
+   * The product already using this code, if any. The SKU identifies the piece —
+   * the shop quotes it, and the public share link is /p/<sku> — so it has to
+   * point at exactly one product. Compared trimmed and case-insensitively, which
+   * is how the database's unique index treats it too, and the record being
+   * edited never clashes with itself.
+   *
+   * The API enforces this as well (409); checking here just means the admin is
+   * told before a long form is submitted.
+   */
+  const skuClash = (sku: string): Product | undefined =>
+    (products ?? []).find(
+      (p) => p.id !== record?.id && (p.sku ?? '').trim().toLowerCase() === sku.toLowerCase()
+    )
+
+  // Flagged while typing, so a clash surfaces at the field instead of at the end
+  // of a long form.
+  const typedSku = (watch('sku') ?? '').trim()
+  const duplicateSku = typedSku ? skuClash(typedSku) : undefined
+  const skuError =
+    errors.sku?.message ??
+    (duplicateSku
+      ? `Already used by "${duplicateSku.name}" — the product code must be unique.`
+      : undefined)
+
   const onSubmit = async (values: FormValues) => {
     if (!categoryId) {
       toast.error('Please select a category')
@@ -446,6 +473,17 @@ export function ProductFormPage() {
       toast.error(netError)
       return
     }
+    const sku = values.sku.trim()
+    const clash = skuClash(sku)
+    if (clash) {
+      setError('sku', {
+        type: 'manual',
+        message: `Already used by "${clash.name}" — the product code must be unique.`,
+      })
+      setFocus('sku')
+      toast.error(`Product Code / SKU "${sku}" is already used by "${clash.name}"`)
+      return
+    }
     // Blank name → use the category ("Rings", "Bangles"), which is how most of
     // the catalogue is described anyway.
     const name = values.name?.trim() || categoryLabel
@@ -455,7 +493,7 @@ export function ProductFormPage() {
     }
     const payload = {
       name,
-      sku: values.sku,
+      sku,
       categoryId: Number(categoryId),
       caratId: Number(caratId),
       grossWeight: values.grossWeight,
@@ -484,8 +522,17 @@ export function ProductFormPage() {
         toast.success('Product added')
       }
       goBack()
-    } catch {
-      toast.error('Something went wrong')
+    } catch (err) {
+      // The API's message is the useful one — a duplicate SKU (409) names the
+      // code that's taken, which is worth putting on the field itself rather
+      // than losing behind a generic "something went wrong".
+      const message =
+        typeof err === 'string' ? err : err instanceof Error ? err.message : 'Something went wrong'
+      if (/sku/i.test(message)) {
+        setError('sku', { type: 'server', message })
+        setFocus('sku')
+      }
+      toast.error(message)
     }
   }
 
@@ -703,8 +750,18 @@ export function ProductFormPage() {
               description="What the piece is and where it sits in the catalogue."
             >
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Product Code / SKU" htmlFor="p-sku" error={errors.sku?.message}>
-                  <Input id="p-sku" placeholder="e.g. RG-1042" {...register('sku')} />
+                <Field
+                  label="Product Code / SKU"
+                  htmlFor="p-sku"
+                  error={skuError}
+                  hint="Unique to this product — it's the code shared with customers."
+                >
+                  <Input
+                    id="p-sku"
+                    placeholder="e.g. RG-1042"
+                    aria-invalid={skuError ? true : undefined}
+                    {...register('sku')}
+                  />
                 </Field>
               </div>
 

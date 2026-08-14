@@ -1,9 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Eye, CheckCheck, MessageCircleReply } from 'lucide-react'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Eye,
+  MailOpen,
+  CheckCheck,
+  MessageCircleReply,
+  ImageIcon,
+} from 'lucide-react'
 import type { ColDef } from 'ag-grid-community'
 import { DataGrid } from '@/components/data/DataGrid'
 import { optionsFilter } from '@/components/data/gridFilters'
@@ -15,6 +24,7 @@ import { SelectField } from '@/components/shared/SelectField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -24,15 +34,19 @@ import {
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
 import { formatDateTime } from '@/lib/format'
+import { resolveImageUrl } from '@/lib/imageUrl'
 import {
   useAddInquiryMutation,
   useDeleteInquiryMutation,
+  useListCaratsQuery,
+  useListCategoriesQuery,
+  useListCustomerTypesQuery,
   useListCustomersQuery,
   useListInquiriesQuery,
   useListProductsQuery,
   useUpdateInquiryMutation,
 } from '@/services/api'
-import type { Id, Inquiry, InquiryStatus } from '@/types'
+import type { Customer, Id, Inquiry, InquiryStatus, Product } from '@/types'
 
 const STATUSES: InquiryStatus[] = ['New', 'Seen', 'Responded', 'Closed']
 
@@ -42,6 +56,26 @@ const statusClass: Record<InquiryStatus, string> = {
   Responded: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
   Closed: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
 }
+
+const customerStatusClass: Record<Customer['status'], string> = {
+  active: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  blocked: 'bg-destructive/15 text-destructive',
+  pending: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+  rejected: 'bg-muted text-muted-foreground',
+}
+
+/**
+ * The status changes an admin can make on an inquiry. Declared once and rendered
+ * both in the grid's Actions column and in the details dialog's footer, so the
+ * two can't drift apart.
+ */
+const STATUS_ACTIONS: { status: InquiryStatus; label: string; icon: ReactNode }[] = [
+  // Not an eye: that's "View Details" in the same row of icon buttons, and two
+  // eyes side by side gave no clue which was which.
+  { status: 'Seen', label: 'Mark Seen', icon: <MailOpen className="size-4" /> },
+  { status: 'Responded', label: 'Mark Responded', icon: <MessageCircleReply className="size-4" /> },
+  { status: 'Closed', label: 'Mark Closed', icon: <CheckCheck className="size-4" /> },
+]
 
 const schema = z.object({
   quantity: z.number({ message: 'Enter a valid quantity' }).int().positive('Enter a valid quantity'),
@@ -162,26 +196,417 @@ function InquiryFormDialog({
   )
 }
 
+/** Round to milligrams — float sums of 0.001-precision weights drift. */
+const round3 = (n: number) => Math.round(n * 1000) / 1000
+
+/**
+ * One specification on the bill's item line — label above value, so several fit
+ * across the line's width. `wide` gives free text (stone details, notes) the
+ * full row.
+ */
+function Spec({ label, value, wide }: { label: string; value: ReactNode; wide?: boolean }) {
+  const empty = value === null || value === undefined || value === ''
+  return (
+    <div className={cn('min-w-0', wide && 'col-span-2 sm:col-span-3')}>
+      <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </dt>
+      <dd className={cn('font-medium', wide ? 'wrap-break-word' : 'truncate')}>
+        {empty ? '—' : value}
+      </dd>
+    </div>
+  )
+}
+
+/** A label above its value in the bill's header blocks. */
+function BillField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        {label}
+      </p>
+      <div className="mt-1 grid gap-0.5">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * The inquiry laid out as a bill: letterhead, who it came from, the item line
+ * with its photo and specifications, and the weight totals for the quantity
+ * asked for.
+ *
+ * The catalogue deliberately carries no price/MRP (3.5), so the totals are
+ * weights rather than amounts — which is what the shop quotes against anyway.
+ */
+function InquiryBill({
+  inquiry,
+  customer,
+  product,
+  categoryName,
+  tierName,
+  caratName,
+}: {
+  inquiry: Inquiry
+  customer?: Customer
+  product?: Product
+  categoryName: (id?: Id) => string
+  tierName: (id: Id | null) => string
+  caratName: (product?: Product) => string
+}) {
+  // Less weight = gross − net — the same rule the products grid and the
+  // customer app use.
+  const lessWeight =
+    product && product.netWeight != null ? round3(product.grossWeight - product.netWeight) : null
+
+  // Prefer the gallery, falling back to the legacy single imageUrl — the same
+  // order the product form and the customer app use, so a product saved before
+  // the gallery existed still shows its photo.
+  const gallery = product?.images?.length
+    ? product.images
+    : product?.imageUrl
+      ? [product.imageUrl]
+      : []
+  const primaryImage = gallery[0]
+
+  const qty = inquiry.quantity
+  const totalGross = product ? round3(product.grossWeight * qty) : null
+  const totalLess = lessWeight != null ? round3(lessWeight * qty) : null
+  const totalNet = product?.netWeight != null ? round3(product.netWeight * qty) : null
+
+  return (
+    <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      {/* Letterhead */}
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b bg-muted/40 px-4 py-3">
+        <div className="min-w-0">
+          <p className="font-heading text-base font-semibold">Naman Jewels</p>
+          <p className="text-xs text-muted-foreground">Inquiry / Estimate</p>
+        </div>
+        <div className="sm:text-right">
+          <p className="font-heading text-base font-semibold">#{inquiry.id}</p>
+          <p className="text-xs text-muted-foreground">{formatDateTime(inquiry.createdAt)}</p>
+        </div>
+      </header>
+
+      {/* Who it's from, and where the inquiry stands */}
+      <div className="grid gap-4 border-b px-4 py-3 text-sm sm:grid-cols-[1fr_auto]">
+        <BillField label="Inquiry From">
+          {customer ? (
+            <>
+              <p className="flex flex-wrap items-center gap-2 font-medium">
+                {customer.companyName}
+                {customer.customerTypeId != null && (
+                  <Badge variant="secondary">{tierName(customer.customerTypeId)}</Badge>
+                )}
+              </p>
+              {customer.mobileNumber && (
+                <a
+                  href={`tel:${customer.mobileNumber}`}
+                  className="text-muted-foreground underline-offset-3 hover:underline"
+                >
+                  {customer.mobileNumber}
+                </a>
+              )}
+              {customer.email && (
+                <a
+                  href={`mailto:${customer.email}`}
+                  className="wrap-break-word text-muted-foreground underline-offset-3 hover:underline"
+                >
+                  {customer.email}
+                </a>
+              )}
+              <p className="wrap-break-word text-muted-foreground">
+                {[customer.address, customer.city].filter(Boolean).join(', ') || '—'}
+              </p>
+              {customer.referenceBy && (
+                <p className="text-muted-foreground">Reference by {customer.referenceBy}</p>
+              )}
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <Badge variant="ghost" className={customerStatusClass[customer.status]}>
+                  {customer.status.charAt(0).toUpperCase() + customer.status.slice(1)}
+                </Badge>
+                <span>Last login {formatDateTime(customer.lastLogin)}</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              This customer (#{inquiry.customerId}) has been deleted.
+            </p>
+          )}
+        </BillField>
+
+        {/* Its own grid rather than a BillField: the status block hugs the
+            right edge of the bill on wider screens. */}
+        <div className="grid content-start gap-1 sm:justify-items-end sm:text-right">
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Status
+          </p>
+          <Badge variant="ghost" className={statusClass[inquiry.status]}>
+            {inquiry.status}
+          </Badge>
+          <p className="text-xs text-muted-foreground">
+            Received {formatDateTime(inquiry.createdAt)}
+          </p>
+        </div>
+      </div>
+
+      {/* Item line — the piece as a horizontal card: photo, then specs */}
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <span>Item</span>
+        <span>Qty</span>
+      </div>
+      <div className="flex items-start gap-3 border-b px-4 py-3 sm:gap-4">
+        {/* Fixed square, `object-contain`: product photos are cropped freely by
+            the admin, so filling the panel would cut pieces off. The whole
+            photo is shown, letterboxed against the muted panel. */}
+        <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border sm:size-28">
+          {primaryImage ? (
+            <img
+              src={resolveImageUrl(primaryImage)}
+              alt={product?.name ?? 'Product'}
+              className="size-full object-contain"
+            />
+          ) : (
+            <div className="flex size-full items-center justify-center text-muted-foreground">
+              <ImageIcon className="size-6" />
+            </div>
+          )}
+          {gallery.length > 1 && (
+            <span className="absolute right-1 bottom-1 rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+              +{gallery.length - 1}
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1 text-sm">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="truncate font-heading font-semibold">
+              {product?.name ?? 'Product no longer in the catalogue'}
+            </p>
+            {product &&
+              ((product.status ?? 'live') === 'private' ? (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Private
+                </Badge>
+              ) : (
+                <Badge variant="secondary">Live</Badge>
+              ))}
+          </div>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {product ? `Code ${product.sku}` : `Product #${inquiry.productId}`}
+          </p>
+
+          {product ? (
+            <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              <Spec label="Category" value={categoryName(product.categoryId)} />
+              <Spec label="Carat" value={caratName(product)} />
+              <Spec label="Size" value={product.size} />
+              <Spec label="Gross" value={`${product.grossWeight} gm`} />
+              <Spec label="Less" value={lessWeight != null ? `${lessWeight} gm` : null} />
+              <Spec
+                label="Net"
+                value={product.netWeight != null ? `${product.netWeight} gm` : null}
+              />
+              <Spec label="Stone Details" value={product.stoneDetails} wide />
+              <Spec label="Notes" value={product.notes} wide />
+            </dl>
+          ) : (
+            <p className="mt-2.5 text-muted-foreground">
+              This product has been deleted, so its specifications are no longer available.
+            </p>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="font-heading text-base font-semibold">× {qty}</p>
+        </div>
+      </div>
+
+      {/* Totals — weights for the quantity asked for, in place of amounts */}
+      <div className="flex justify-end border-b px-4 py-3">
+        <dl className="grid w-full max-w-xs grid-cols-2 gap-y-1.5 text-sm">
+          <dt className="text-muted-foreground">Gross weight</dt>
+          <dd className="text-right font-medium">
+            {totalGross != null ? `${totalGross} gm` : '—'}
+          </dd>
+          <dt className="text-muted-foreground">Less weight</dt>
+          <dd className="text-right font-medium">
+            {totalLess != null ? `${totalLess} gm` : '—'}
+          </dd>
+          <dt className="mt-1 border-t pt-1.5 font-medium">Total net weight</dt>
+          <dd className="mt-1 border-t pt-1.5 text-right font-heading font-semibold">
+            {totalNet != null ? `${totalNet} gm` : '—'}
+          </dd>
+          <dd className="col-span-2 text-right text-xs text-muted-foreground">
+            for {qty} {qty === 1 ? 'piece' : 'pieces'}
+          </dd>
+        </dl>
+      </div>
+
+      {/* Remark */}
+      <footer className="px-4 py-3 text-sm">
+        <BillField label="Remark">
+          <p className="wrap-break-word">{inquiry.remark || '—'}</p>
+        </BillField>
+      </footer>
+    </article>
+  )
+}
+
+/**
+ * Everything recorded about one inquiry — the piece that was asked about, who
+ * asked, and the inquiry itself — plus the same actions the grid's Actions
+ * column offers, so an admin can act on what they're reading without closing
+ * the dialog first.
+ *
+ * The inquiry is passed in fresh from the list on every render, so a status
+ * changed from the footer is reflected here immediately.
+ */
+function InquiryDetailsDialog({
+  inquiry,
+  customer,
+  product,
+  categoryName,
+  tierName,
+  caratName,
+  updating,
+  onOpenChange,
+  onStatus,
+  onEdit,
+  onDelete,
+}: {
+  inquiry?: Inquiry
+  customer?: Customer
+  product?: Product
+  categoryName: (id?: Id) => string
+  tierName: (id: Id | null) => string
+  caratName: (product?: Product) => string
+  updating: boolean
+  onOpenChange: (open: boolean) => void
+  onStatus: (inquiry: Inquiry, status: InquiryStatus) => void
+  onEdit: (inquiry: Inquiry) => void
+  onDelete: (inquiry: Inquiry) => void
+}) {
+  return (
+    <Dialog open={Boolean(inquiry)} onOpenChange={onOpenChange}>
+      {/* Wider than the form dialogs: the product card lays its image and
+          specifications out side by side. */}
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Inquiry Details</DialogTitle>
+          <DialogDescription>
+            The inquiry as a bill — item, weights and the customer who raised it.
+          </DialogDescription>
+        </DialogHeader>
+
+        {inquiry && (
+          <>
+            <div className="scrollbar-tw max-h-[55vh] overflow-y-auto pr-1 sm:max-h-[60vh]">
+              <InquiryBill
+                inquiry={inquiry}
+                customer={customer}
+                product={product}
+                categoryName={categoryName}
+                tierName={tierName}
+                caratName={caratName}
+              />
+            </div>
+
+            {/* The same actions the grid's Actions column offers, so they're
+                available in both places. */}
+            <DialogFooter className="flex-row flex-wrap items-center gap-2 sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                {STATUS_ACTIONS.map((action) => (
+                  <Button
+                    key={action.status}
+                    type="button"
+                    variant="outline"
+                    disabled={updating || inquiry.status === action.status}
+                    title={
+                      inquiry.status === action.status
+                        ? `Already marked ${action.status}`
+                        : action.label
+                    }
+                    onClick={() => onStatus(inquiry, action.status)}
+                  >
+                    {action.icon}
+                    {action.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="secondary" onClick={() => onEdit(inquiry)}>
+                  <Pencil className="size-4" /> Edit
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => onDelete(inquiry)}>
+                  <Trash2 className="size-4" /> Delete
+                </Button>
+              </div>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function InquiriesPage() {
   const { data: inquiries, isLoading } = useListInquiriesQuery()
   const { data: customers } = useListCustomersQuery()
   const { data: products } = useListProductsQuery()
-  const [updateInquiry] = useUpdateInquiryMutation()
+  // Master data the details dialog resolves the inquiry's ids against.
+  const { data: categories } = useListCategoriesQuery()
+  const { data: customerTypes } = useListCustomerTypesQuery()
+  const { data: carats } = useListCaratsQuery()
+  const [updateInquiry, { isLoading: updatingStatus }] = useUpdateInquiryMutation()
   const [deleteInquiry] = useDeleteInquiryMutation()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Inquiry | undefined>()
-  const [viewing, setViewing] = useState<Inquiry | undefined>()
+  // Held as an id rather than a copy of the row: a status changed from inside
+  // the dialog then re-reads from the refreshed list instead of showing the
+  // stale value it was opened with. A deleted inquiry simply closes the dialog.
+  const [viewingId, setViewingId] = useState<Id | undefined>()
   const [toDelete, setToDelete] = useState<Inquiry | undefined>()
 
-  const customerName = useMemo(() => {
-    const m = new Map((customers ?? []).map((c) => [c.id, c.companyName]))
+  const viewing = useMemo(
+    () => (viewingId != null ? (inquiries ?? []).find((i) => i.id === viewingId) : undefined),
+    [inquiries, viewingId]
+  )
+
+  const customerById = useMemo(
+    () => new Map((customers ?? []).map((c) => [c.id, c])),
+    [customers]
+  )
+  const productById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products])
+
+  const customerName = useMemo(
+    () => (id?: Id) => (id != null ? customerById.get(id)?.companyName ?? '—' : '—'),
+    [customerById]
+  )
+  const productLabel = useMemo(
+    () => (id?: Id) => {
+      const product = id != null ? productById.get(id) : undefined
+      return product ? `${product.name} (${product.sku})` : '—'
+    },
+    [productById]
+  )
+  const categoryName = useMemo(() => {
+    const m = new Map((categories ?? []).map((c) => [c.id, c.name]))
     return (id?: Id) => (id != null ? m.get(id) ?? '—' : '—')
-  }, [customers])
-  const productLabel = useMemo(() => {
-    const m = new Map((products ?? []).map((p) => [p.id, `${p.name} (${p.sku})`]))
-    return (id?: Id) => (id != null ? m.get(id) ?? '—' : '—')
-  }, [products])
+  }, [categories])
+  const tierName = useMemo(() => {
+    const m = new Map((customerTypes ?? []).map((t) => [t.id, t.name]))
+    return (id: Id | null) => (id != null ? m.get(id) ?? '—' : '—')
+  }, [customerTypes])
+  // Falls back to the product's stored purity text for products created before
+  // the carat master (and for any whose carat has since been deleted).
+  const caratName = useMemo(() => {
+    const m = new Map((carats ?? []).map((c) => [c.id, c.name]))
+    return (product?: Product) => {
+      if (!product) return '—'
+      return (product.caratId != null ? m.get(product.caratId) : undefined) ?? product.purity ?? '—'
+    }
+  }, [carats])
 
   const lookup: Lookup = useMemo(
     () => ({
@@ -192,8 +617,27 @@ export function InquiriesPage() {
   )
 
   const setStatus = async (i: Inquiry, status: InquiryStatus) => {
-    await updateInquiry({ id: i.id, patch: { status } }).unwrap()
-    toast.success(`Marked as ${status}`)
+    if (i.status === status) return
+    try {
+      await updateInquiry({ id: i.id, patch: { status } }).unwrap()
+      toast.success(`Marked as ${status}`)
+    } catch (err) {
+      toast.error(
+        typeof err === 'string' ? err : err instanceof Error ? err.message : 'Something went wrong'
+      )
+    }
+  }
+
+  // Shared by the grid's Actions column and the details dialog's footer. Editing
+  // or deleting from the dialog closes it first, so two dialogs never stack.
+  const editInquiry = (i: Inquiry) => {
+    setViewingId(undefined)
+    setEditing(i)
+    setFormOpen(true)
+  }
+  const confirmDelete = (i: Inquiry) => {
+    setViewingId(undefined)
+    setToDelete(i)
   }
 
   const columns = useMemo<ColDef<Inquiry>[]>(
@@ -256,12 +700,15 @@ export function InquiriesPage() {
         cellRenderer: (p: { data: Inquiry }) => (
           <RowActions
             items={[
-              { label: 'View Details', icon: <Eye className="size-4" />, onClick: () => setViewing(p.data) },
-              { label: 'Mark Seen', icon: <Eye className="size-4" />, onClick: () => setStatus(p.data, 'Seen') },
-              { label: 'Mark Responded', icon: <MessageCircleReply className="size-4" />, onClick: () => setStatus(p.data, 'Responded') },
-              { label: 'Mark Closed', icon: <CheckCheck className="size-4" />, onClick: () => setStatus(p.data, 'Closed') },
-              { label: 'Edit', icon: <Pencil className="size-4" />, onClick: () => { setEditing(p.data); setFormOpen(true) } },
-              { label: 'Delete', icon: <Trash2 className="size-4" />, destructive: true, onClick: () => setToDelete(p.data) },
+              { label: 'View Details', icon: <Eye className="size-4" />, onClick: () => setViewingId(p.data.id) },
+              // Same three status actions the details dialog offers.
+              ...STATUS_ACTIONS.map((action) => ({
+                label: action.label,
+                icon: action.icon,
+                onClick: () => setStatus(p.data, action.status),
+              })),
+              { label: 'Edit', icon: <Pencil className="size-4" />, onClick: () => editInquiry(p.data) },
+              { label: 'Delete', icon: <Trash2 className="size-4" />, destructive: true, onClick: () => confirmDelete(p.data) },
             ]}
           />
         ),
@@ -297,32 +744,21 @@ export function InquiriesPage() {
 
       <InquiryFormDialog open={formOpen} onOpenChange={setFormOpen} record={editing} lookup={lookup} />
 
-      {/* View details */}
-      <Dialog open={Boolean(viewing)} onOpenChange={(o) => !o && setViewing(undefined)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Inquiry Details</DialogTitle>
-          </DialogHeader>
-          {viewing && (
-            <dl className="grid grid-cols-3 gap-y-3 text-sm">
-              <dt className="text-muted-foreground">Customer</dt>
-              <dd className="col-span-2 font-medium">{customerName(viewing.customerId)}</dd>
-              <dt className="text-muted-foreground">Product</dt>
-              <dd className="col-span-2 font-medium">{productLabel(viewing.productId)}</dd>
-              <dt className="text-muted-foreground">Quantity</dt>
-              <dd className="col-span-2 font-medium">{viewing.quantity}</dd>
-              <dt className="text-muted-foreground">Remark</dt>
-              <dd className="col-span-2 font-medium">{viewing.remark || '—'}</dd>
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="col-span-2">
-                <Badge variant="ghost" className={statusClass[viewing.status]}>{viewing.status}</Badge>
-              </dd>
-              <dt className="text-muted-foreground">Received</dt>
-              <dd className="col-span-2 font-medium">{formatDateTime(viewing.createdAt)}</dd>
-            </dl>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* View details — full product, customer and inquiry record, with the
+          same actions as the grid's Actions column. */}
+      <InquiryDetailsDialog
+        inquiry={viewing}
+        customer={viewing ? customerById.get(viewing.customerId) : undefined}
+        product={viewing ? productById.get(viewing.productId) : undefined}
+        categoryName={categoryName}
+        tierName={tierName}
+        caratName={caratName}
+        updating={updatingStatus}
+        onOpenChange={(o) => !o && setViewingId(undefined)}
+        onStatus={setStatus}
+        onEdit={editInquiry}
+        onDelete={confirmDelete}
+      />
 
       <ConfirmDialog
         open={Boolean(toDelete)}
