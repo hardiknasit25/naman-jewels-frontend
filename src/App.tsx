@@ -15,11 +15,16 @@ import { PagesPage } from "@/features/pages/PagesPage";
 // import { SessionLogsPage } from "@/features/logs/SessionLogsPage";
 // import { AuditLogsPage } from '@/features/logs/AuditLogsPage'
 import { ProfilePage } from "@/pages/ProfilePage";
+import { AccountDeletionPage } from "@/pages/AccountDeletionPage";
+import { PrivacyPolicyPage } from "@/pages/PrivacyPolicyPage";
 
 function App() {
   return (
     <Routes>
+      {/* Public routes — accessible without authentication */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/account-deletion" element={<AccountDeletionPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
       <Route
         element={
