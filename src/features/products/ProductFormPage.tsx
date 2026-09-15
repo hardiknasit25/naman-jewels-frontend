@@ -794,7 +794,7 @@ export function ProductFormPage() {
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
-                  <Input id="p-gw" type="number" step="0.01" {...register('grossWeight', { valueAsNumber: true })} />
+                  <Input id="p-gw" type="number" step="0.001" {...register('grossWeight', { valueAsNumber: true })} />
                 </Field>
               </div>
 
