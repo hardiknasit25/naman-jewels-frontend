@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
+import { Eye, EyeOff } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -29,11 +30,9 @@ import {
 const EMPTY: CustomerFormValues = {
   companyName: '',
   mobileNumber: '',
-  email: '',
   password: '',
-  address: '',
+  confirmPassword: '',
   city: '',
-  referenceBy: '',
 }
 
 const sessionOptions = (Object.keys(SESSION_DURATION_LABELS) as SessionDuration[]).map(
@@ -57,6 +56,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
   )
   const [typeId, setTypeId] = useState(defaultTypeId)
   const [session, setSession] = useState<SessionDuration>('1d')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const {
     register,
@@ -75,12 +76,10 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
       reset({
         companyName: customer.companyName,
         mobileNumber: customer.mobileNumber,
-        email: customer.email,
         // Never prefill the password hash; blank means "keep existing".
         password: '',
-        address: customer.address,
+        confirmPassword: '',
         city: customer.city,
-        referenceBy: customer.referenceBy ?? '',
       })
       setTypeId(customer.customerTypeId != null ? String(customer.customerTypeId) : defaultTypeId)
       setSession(customer.sessionDuration)
@@ -94,7 +93,8 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
   const onSubmit = async (values: CustomerFormValues) => {
     // Only send a password when one was actually entered; the backend rejects an
     // empty string (min 6) and a blank field means "keep the existing password".
-    const { password, ...rest } = values
+    // confirmPassword only exists to validate the form (see schema.ts).
+    const { password, confirmPassword: _confirmPassword, ...rest } = values
     const withPassword = password ? { ...rest, password } : rest
     try {
       if (customer) {
@@ -142,36 +142,60 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
             <Field label="Mobile Number" htmlFor="mobileNumber" hint="Also used for login" error={errors.mobileNumber?.message}>
               <Input id="mobileNumber" {...register('mobileNumber')} />
             </Field>
-            <Field label="Email" htmlFor="email" error={errors.email?.message}>
-              <Input id="email" type="email" {...register('email')} />
-            </Field>
-          </div>
-
-          <Field
-            label="Password"
-            htmlFor="password"
-            hint={isEdit ? 'Leave blank to keep the current password' : 'Used for customer app login'}
-            error={errors.password?.message}
-          >
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              placeholder={isEdit ? '••••••••' : 'Min 6 characters'}
-              {...register('password')}
-            />
-          </Field>
-
-          <Field label="Address" htmlFor="address" error={errors.address?.message}>
-            <Input id="address" {...register('address')} />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="City" htmlFor="city" error={errors.city?.message}>
               <Input id="city" {...register('city')} />
             </Field>
-            <Field label="Reference By" htmlFor="referenceBy" optional>
-              <Input id="referenceBy" {...register('referenceBy')} />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Password"
+              htmlFor="password"
+              hint={isEdit ? 'Leave blank to keep the current password' : 'Used for customer app login'}
+              error={errors.password?.message}
+            >
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="pr-9"
+                  placeholder={isEdit ? '••••••••' : 'Min 6 characters'}
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </Field>
+            <Field
+              label="Confirm Password"
+              htmlFor="confirmPassword"
+              error={errors.confirmPassword?.message}
+            >
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="pr-9"
+                  placeholder={isEdit ? '••••••••' : 'Re-enter password'}
+                  {...register('confirmPassword')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 flex items-center px-2.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </Field>
           </div>
 

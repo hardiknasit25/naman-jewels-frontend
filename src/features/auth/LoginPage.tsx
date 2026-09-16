@@ -46,12 +46,12 @@ export function LoginPage() {
   }, [isAuthenticated, navigate]);
 
   const onSubmit = async (values: LoginValues) => {
-    const ok = await login(values.email, values.password);
-    if (ok) {
+    const result = await login(values.email, values.password);
+    if (result === true) {
       toast.success("Welcome back");
       navigate("/dashboard", { replace: true });
     } else {
-      toast.error("Invalid credentials");
+      toast.error(result);
     }
   };
 

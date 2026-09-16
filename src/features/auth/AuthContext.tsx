@@ -19,7 +19,7 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<string | true>
   logout: () => void
 }
 
@@ -41,7 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readUser())
 
   // Real JWT login against the backend. Stores the token + user for later
-  // authenticated requests (see services/db.ts).
+  // authenticated requests (see services/db.ts). Returns `true` on success, or
+  // the backend's error message on failure (e.g. "already logged in on another
+  // device") so the login screen can show the actual reason.
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -49,14 +51,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      if (!res.ok) return false
+      if (!res.ok) {
+        let message = 'Invalid credentials'
+        try {
+          const body = await res.json()
+          if (body?.message) message = body.message
+        } catch {
+          /* non-JSON error body */
+        }
+        return message
+      }
       const data = (await res.json()) as { token: string; user: AuthUser }
       localStorage.setItem(TOKEN_KEY, data.token)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user))
       setUser(data.user)
       return true
     } catch {
-      return false
+      return 'Unable to reach the server'
     }
   }, [])
 

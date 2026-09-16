@@ -36,10 +36,12 @@ export const SESSION_DURATION_LABELS: Record<SessionDuration, string> = {
 export interface Customer extends Timestamped {
   companyName: string
   mobileNumber: string
-  email: string
-  address: string
+  // No longer collected in the Add/Edit Customer form — only set for older
+  // records created before this field was removed.
+  email: string | null
+  address: string | null
   city: string
-  referenceBy?: string
+  referenceBy?: string | null
   /** Write-only: plaintext password sent on create/update; hashed server-side, never returned. */
   password?: string
   /** References CustomerType.id. Empty while a registration is pending. */
