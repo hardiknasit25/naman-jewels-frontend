@@ -10,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
-  email: z.string().min(1, 'Email is required').email('Enter a valid email'),
   mobile: z.string().min(7, 'Enter a valid mobile number'),
 })
 type ProfileValues = z.infer<typeof schema>
@@ -24,7 +23,6 @@ export function ProfilePage() {
     resolver: zodResolver(schema),
     defaultValues: {
       name: 'Naman Admin',
-      email: 'admin@namanjewels.com',
       mobile: '9825000000',
     },
   })
@@ -47,9 +45,6 @@ export function ProfilePage() {
           <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
             <Field label="Name" htmlFor="name" error={errors.name?.message}>
               <Input id="name" {...register('name')} />
-            </Field>
-            <Field label="Email" htmlFor="email" error={errors.email?.message}>
-              <Input id="email" type="email" {...register('email')} />
             </Field>
             <Field label="Mobile" htmlFor="mobile" error={errors.mobile?.message}>
               <Input id="mobile" {...register('mobile')} />
