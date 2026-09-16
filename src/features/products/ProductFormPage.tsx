@@ -338,19 +338,15 @@ export function ProductFormPage() {
       : undefined
 
   // ----- Less factor validation ---------------------------------------------
-  // Every product carries at least one less factor, and every row needs a weight.
-  // The factor name is optional: an unnamed deduction still counts against the
-  // gross weight, which is the number the rest of the form is built on.
+  // Less factors are optional. When the admin does add a row, though, it needs
+  // a weight — the factor name stays optional either way.
   const rowsMissingWeight = useMemo(
     () => lessFactors.map((row) => parseFactorWeight(row.weight) == null),
     [lessFactors]
   )
-  const lessError =
-    lessFactors.length === 0
-      ? 'Add at least one less weight factor.'
-      : rowsMissingWeight.some(Boolean)
-        ? 'Enter a weight for every factor, or remove the empty rows.'
-        : undefined
+  const lessError = rowsMissingWeight.some(Boolean)
+    ? 'Enter a weight for every factor, or remove the empty rows.'
+    : undefined
 
   // Hydrate the form once the record (edit) or category list (create) is ready.
   useEffect(() => {
@@ -371,13 +367,11 @@ export function ProductFormPage() {
       setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
       setStatus(record.status ?? 'live')
       setCustomerTypeIds(record.customerTypeIds ?? [])
-      // A product saved before less factors were mandatory can have none — open
-      // with an empty row so the requirement is visible and fillable in place.
       const storedFactors = (record.lessFactors ?? []).map((r) => ({
         label: r.label ?? '',
         weight: String(r.weight),
       }))
-      setLessFactors(storedFactors.length > 0 ? storedFactors : [{ label: '', weight: '' }])
+      setLessFactors(storedFactors)
       setFactorsTouched(false)
       // A stored net that doesn't match Gross − Less was entered by hand; keep it
       // that way instead of silently recalculating it out from under the admin.
@@ -396,9 +390,9 @@ export function ProductFormPage() {
       setStatus('live')
       // No tags = visible to every tier, which matches the "Public" default.
       setCustomerTypeIds([])
-      // One row up front — at least one factor is required, so an empty list would
-      // just be a button the admin has to find before they can save.
-      setLessFactors([{ label: '', weight: '' }])
+      // No rows by default — less factors are optional; the admin adds one via
+      // "Add factor" only if the piece actually has a deduction.
+      setLessFactors([])
       setFactorsTouched(false)
       setNetOverridden(false)
     }
@@ -801,7 +795,7 @@ export function ProductFormPage() {
               <Field
                 label="Less Weight Factors"
                 error={factorsTouched ? lessError : undefined}
-                hint="Itemized breakdown of the deducted (less) weight — at least one row is required. Enter the weight, then name the factor (Stone, Kundan, Meena…) if you want to; the name is optional. The total is subtracted from Gross to give the Net weight below."
+                hint="Itemized breakdown of the deducted (less) weight — optional, add a row only if the piece has one. Enter the weight, then name the factor (Stone, Kundan, Meena…) if you want to; the name is optional. The total is subtracted from Gross to give the Net weight below."
               >
                 <div className="grid gap-2">
                   {/* Weight leads each row: it's the required half and the number the
