@@ -143,6 +143,53 @@ function TierPicker({
 }
 
 /**
+ * Single-choice carat picker, styled like the TierPicker chips so the form reads
+ * consistently. Carat lists are short, so every option stays visible at once.
+ */
+function CaratPicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (id: string) => void
+}) {
+  if (options.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No carats defined yet — add them under Carats first.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Carat / Purity">
+      {options.map((option) => {
+        const active = option.value === value
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+              active
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-muted/40 text-muted-foreground hover:border-primary/50 hover:bg-muted'
+            )}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Full-page create/update product form. Edit mode is keyed off the `:id` route
  * param; create mode renders when there is no id. The image gallery sits in a
  * dedicated column that moves to the right on laptops (lg+) and stacks on top
@@ -763,22 +810,14 @@ export function ProductFormPage() {
                 <Field label="Category">
                   <SelectField value={categoryId} onValueChange={setCategoryId} options={categoryOptions} placeholder="Select category" />
                 </Field>
-                <Field
-                  label="Carat / Purity"
-                  hint={
-                    caratOptions.length === 0
-                      ? 'No carats defined yet — add them under Carats first.'
-                      : 'Managed in the Carats master'
-                  }
-                >
-                  <SelectField
-                    value={caratId}
-                    onValueChange={setCaratId}
-                    options={caratOptions}
-                    placeholder="Select carat"
-                  />
-                </Field>
               </div>
+
+              <Field
+                label="Carat / Purity"
+                hint={caratOptions.length === 0 ? undefined : 'Managed in the Carats master'}
+              >
+                <CaratPicker options={caratOptions} value={caratId} onChange={setCaratId} />
+              </Field>
             </Section>
 
             {/* Laid out as the calculation runs: Gross, what comes off it, what's left. */}

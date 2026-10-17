@@ -21,7 +21,7 @@ export interface CustomerType extends Timestamped {
 export type CustomerStatus = 'pending' | 'active' | 'blocked' | 'rejected'
 
 /** Preset session durations (4.4 Session Duration Settings). */
-export type SessionDuration = '2h' | '4h' | '12h' | '1d' | '1w' | '1m'
+export type SessionDuration = '2h' | '4h' | '12h' | '1d' | '1w' | '1m' | '6m' | '1y'
 
 export const SESSION_DURATION_LABELS: Record<SessionDuration, string> = {
   '2h': '2 Hours',
@@ -30,6 +30,8 @@ export const SESSION_DURATION_LABELS: Record<SessionDuration, string> = {
   '1d': '1 Day',
   '1w': '1 Week',
   '1m': '1 Month',
+  '6m': '6 Months',
+  '1y': '1 Year',
 }
 
 // 4.4 Customer (User) Management
