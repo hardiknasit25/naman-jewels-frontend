@@ -10,7 +10,7 @@ import { RowActions } from '@/components/shared/RowActions'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatWeight, round3 } from '@/lib/format'
 import {
   useDeleteProductMutation,
   useListCaratsQuery,
@@ -166,7 +166,7 @@ export function ProductsPage() {
         ...optionsFilter<Product>(caratFilterOptions, 'All carats'),
       },
       // Ordered as the calculation runs: Gross − Less = Net.
-      { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130 },
+      { headerName: 'Gross (gm)', field: 'grossWeight', maxWidth: 130, valueFormatter: (p) => formatWeight(p.value) },
       {
         // Less weight = gross − net, rounded to kill float noise. Same rule the
         // customer app uses; only meaningful once a net weight exists.
@@ -174,12 +174,10 @@ export function ProductsPage() {
         colId: 'lessWeight',
         maxWidth: 130,
         valueGetter: (p) =>
-          p.data?.netWeight != null
-            ? Number((p.data.grossWeight - p.data.netWeight).toFixed(3))
-            : null,
-        valueFormatter: (p) => (p.value != null ? p.value : '—'),
+          p.data?.netWeight != null ? round3(p.data.grossWeight - p.data.netWeight) : null,
+        valueFormatter: (p) => formatWeight(p.value),
       },
-      { headerName: 'Net (gm)', field: 'netWeight', maxWidth: 120, valueFormatter: (p) => (p.value != null ? p.value : '—') },
+      { headerName: 'Net (gm)', field: 'netWeight', maxWidth: 120, valueFormatter: (p) => formatWeight(p.value) },
       { headerName: 'Size', field: 'size', valueFormatter: (p) => p.value || '—' },
       { headerName: 'Created', field: 'createdAt', valueFormatter: (p) => formatDate(p.value) },
       {

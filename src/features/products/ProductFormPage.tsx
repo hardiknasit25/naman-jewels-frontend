@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { formatWeight, round3, toWeightInput } from '@/lib/format'
 import { fileToDataUrl } from '@/lib/cropImage'
 import { resolveImageUrl } from '@/lib/imageUrl'
 import {
@@ -38,7 +39,8 @@ const schema = z.object({
   // Optional: left blank, the product takes the name of its category on submit.
   name: z.string().optional(),
   sku: z.string().min(1, 'Product Code / SKU is required'),
-  grossWeight: z.number({ message: 'Enter a valid weight in grams' }).positive('Enter a valid weight in grams'),
+  // Kept as a string, like Net, so it can show "12.500" rather than "12.5".
+  grossWeight: z.string().refine((v) => Number(v) > 0, 'Enter a valid weight in grams'),
   netWeight: z.string().optional(),
   size: z.string().optional(),
   stoneDetails: z.string().optional(),
@@ -53,8 +55,6 @@ type FormValues = z.infer<typeof schema>
  */
 const PRODUCT_ASPECT = null
 
-/** Round to milligrams — floating point sums of 0.001-precision inputs drift. */
-const round3 = (n: number) => Math.round(n * 1000) / 1000
 
 /**
  * A less-factor row's weight, or null when it isn't a usable number. The weight
@@ -350,6 +350,7 @@ export function ProductFormPage() {
   const [netOverridden, setNetOverridden] = useState(false)
   const grossWeight = watch('grossWeight')
   const netWeight = watch('netWeight')
+  const grossValue = grossWeight?.trim() ? Number(grossWeight) : null
 
   const lessTotal = useMemo(
     () =>
@@ -363,25 +364,25 @@ export function ProductFormPage() {
   )
 
   const autoNet = useMemo(() => {
-    if (grossWeight == null || !Number.isFinite(grossWeight)) return null
-    return round3(grossWeight - lessTotal)
-  }, [grossWeight, lessTotal])
+    if (grossValue == null || !Number.isFinite(grossValue)) return null
+    return round3(grossValue - lessTotal)
+  }, [grossValue, lessTotal])
 
   // Keep the field in step with the formula until the admin takes it over.
   useEffect(() => {
     if (netOverridden) return
-    setValue('netWeight', autoNet != null ? String(autoNet) : '')
+    setValue('netWeight', autoNet != null ? formatWeight(autoNet) : '')
   }, [autoNet, netOverridden, setValue])
 
   const useCalculatedNet = () => {
     setNetOverridden(false)
-    setValue('netWeight', autoNet != null ? String(autoNet) : '')
+    setValue('netWeight', autoNet != null ? formatWeight(autoNet) : '')
   }
 
   // The less factors can't add up to more than the piece weighs.
   const netError =
     autoNet != null && autoNet < 0
-      ? `Less factors total ${lessTotal} gm, which is more than the gross weight.`
+      ? `Less factors total ${formatWeight(lessTotal)} gm, which is more than the gross weight.`
       : undefined
 
   // ----- Less factor validation ---------------------------------------------
@@ -402,8 +403,8 @@ export function ProductFormPage() {
       reset({
         name: record.name,
         sku: record.sku,
-        grossWeight: record.grossWeight,
-        netWeight: record.netWeight != null ? String(record.netWeight) : '',
+        grossWeight: formatWeight(record.grossWeight),
+        netWeight: record.netWeight != null ? formatWeight(record.netWeight) : '',
         size: record.size ?? '',
         stoneDetails: record.stoneDetails ?? '',
         notes: record.notes ?? '',
@@ -416,7 +417,7 @@ export function ProductFormPage() {
       setCustomerTypeIds(record.customerTypeIds ?? [])
       const storedFactors = (record.lessFactors ?? []).map((r) => ({
         label: r.label ?? '',
-        weight: String(r.weight),
+        weight: formatWeight(Number(r.weight)),
       }))
       setLessFactors(storedFactors)
       setFactorsTouched(false)
@@ -430,7 +431,7 @@ export function ProductFormPage() {
         record.netWeight != null && Math.abs(record.netWeight - calculated) > 0.0005
       )
     } else {
-      reset({ name: '', sku: '', grossWeight: undefined, netWeight: '', size: '', stoneDetails: '', notes: '' })
+      reset({ name: '', sku: '', grossWeight: '', netWeight: '', size: '', stoneDetails: '', notes: '' })
       setCategoryId(categoryOptions[0]?.value ?? '')
       setCaratId(activeCaratOptions[0]?.value ?? '')
       setImages([])
@@ -537,13 +538,17 @@ export function ProductFormPage() {
       sku,
       categoryId: Number(categoryId),
       caratId: Number(caratId),
-      grossWeight: values.grossWeight,
-      netWeight: values.netWeight ? Number(values.netWeight) : null,
+      // Saved to the milligram — 3 decimals, same as they're shown.
+      grossWeight: round3(Number(values.grossWeight)),
+      netWeight: values.netWeight ? round3(Number(values.netWeight)) : null,
       // The weight is what makes a row real; the label is optional and rides along
       // as typed. Rows without a weight can't reach here — `lessError` blocks the
       // submit above rather than dropping them silently.
       lessFactors: lessFactors
-        .map((r) => ({ label: r.label.trim(), weight: parseFactorWeight(r.weight) }))
+        .map((r) => {
+          const weight = parseFactorWeight(r.weight)
+          return { label: r.label.trim(), weight: weight != null ? round3(weight) : null }
+        })
         .filter((r): r is { label: string; weight: number } => r.weight != null),
       size: values.size,
       stoneDetails: values.stoneDetails,
@@ -827,7 +832,14 @@ export function ProductFormPage() {
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Gross Weight (gm)" htmlFor="p-gw" error={errors.grossWeight?.message}>
-                  <Input id="p-gw" type="number" step="0.001" {...register('grossWeight', { valueAsNumber: true })} />
+                  <Input
+                    id="p-gw"
+                    type="number"
+                    step="0.001"
+                    {...register('grossWeight', {
+                      onBlur: (e) => setValue('grossWeight', toWeightInput(e.target.value)),
+                    })}
+                  />
                 </Field>
               </div>
 
@@ -850,6 +862,7 @@ export function ProductFormPage() {
                             placeholder="Weight (gm)"
                             value={row.weight}
                             onChange={(e) => updateFactor(i, 'weight', e.target.value)}
+                            onBlur={(e) => updateFactor(i, 'weight', toWeightInput(e.target.value))}
                             aria-label={`Less factor ${i + 1} weight in grams`}
                             aria-invalid={missingWeight || undefined}
                             className={cn(missingWeight && 'border-destructive')}
@@ -886,7 +899,7 @@ export function ProductFormPage() {
                     {lessFactors.length > 0 && (
                       <p className="text-xs text-muted-foreground">
                         Total less{' '}
-                        <span className="font-medium text-foreground">{lessTotal} gm</span>
+                        <span className="font-medium text-foreground">{formatWeight(lessTotal)} gm</span>
                       </p>
                     )}
                   </div>
@@ -902,8 +915,8 @@ export function ProductFormPage() {
                     autoNet == null
                       ? 'Calculated from Gross − Less factors once a gross weight is entered.'
                       : netOverridden
-                        ? `Entered manually. Calculated value is ${autoNet} gm (Gross ${grossWeight} − Less ${lessTotal}).`
-                        : `Auto-calculated: Gross ${grossWeight} − Less ${lessTotal}. Type here to override.`
+                        ? `Entered manually. Calculated value is ${formatWeight(autoNet)} gm (Gross ${formatWeight(grossValue)} − Less ${formatWeight(lessTotal)}).`
+                        : `Auto-calculated: Gross ${formatWeight(grossValue)} − Less ${formatWeight(lessTotal)}. Type here to override.`
                   }
                 >
                   <div className="flex items-center gap-2">
@@ -916,11 +929,12 @@ export function ProductFormPage() {
                         // Typing hands the field over to the admin; the formula stops
                         // writing to it until "Use calculated" hands it back.
                         onChange: () => setNetOverridden(true),
+                        onBlur: (e) => setValue('netWeight', toWeightInput(e.target.value)),
                       })}
                     />
-                    {netOverridden && autoNet != null && String(autoNet) !== netWeight && (
+                    {netOverridden && autoNet != null && formatWeight(autoNet) !== toWeightInput(netWeight ?? '') && (
                       <Button type="button" variant="outline" size="sm" onClick={useCalculatedNet}>
-                        Use {autoNet}
+                        Use {formatWeight(autoNet)}
                       </Button>
                     )}
                   </div>
@@ -1011,7 +1025,7 @@ export function ProductFormPage() {
       <div className="sticky bottom-0 z-20 mt-auto flex items-center justify-between gap-3 border-t bg-background/90 py-3 backdrop-blur">
         <p className="hidden text-sm text-muted-foreground sm:block">
           {autoNet != null
-            ? `Gross ${grossWeight} gm · Less ${lessTotal} gm · Net ${netWeight || '—'} gm`
+            ? `Gross ${formatWeight(grossValue)} gm · Less ${formatWeight(lessTotal)} gm · Net ${netWeight ? formatWeight(Number(netWeight)) : '—'} gm`
             : 'Enter a gross weight to calculate the net weight.'}
         </p>
         <div className="flex shrink-0 gap-2 max-sm:w-full">

@@ -33,7 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/responsive-dialog'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatWeight, round3 } from '@/lib/format'
 import { resolveImageUrl } from '@/lib/imageUrl'
 import {
   useAddInquiryMutation,
@@ -196,8 +196,6 @@ function InquiryFormDialog({
   )
 }
 
-/** Round to milligrams — float sums of 0.001-precision weights drift. */
-const round3 = (n: number) => Math.round(n * 1000) / 1000
 
 /**
  * One specification on the bill's item line — label above value, so several fit
@@ -400,11 +398,11 @@ function InquiryBill({
               <Spec label="Category" value={categoryName(product.categoryId)} />
               <Spec label="Carat" value={caratName(product)} />
               <Spec label="Size" value={product.size} />
-              <Spec label="Gross" value={`${product.grossWeight} gm`} />
-              <Spec label="Less" value={lessWeight != null ? `${lessWeight} gm` : null} />
+              <Spec label="Gross" value={`${formatWeight(product.grossWeight)} gm`} />
+              <Spec label="Less" value={lessWeight != null ? `${formatWeight(lessWeight)} gm` : null} />
               <Spec
                 label="Net"
-                value={product.netWeight != null ? `${product.netWeight} gm` : null}
+                value={product.netWeight != null ? `${formatWeight(product.netWeight)} gm` : null}
               />
               <Spec label="Stone Details" value={product.stoneDetails} wide />
               <Spec label="Notes" value={product.notes} wide />
@@ -426,15 +424,15 @@ function InquiryBill({
         <dl className="grid w-full max-w-xs grid-cols-2 gap-y-1.5 text-sm">
           <dt className="text-muted-foreground">Gross weight</dt>
           <dd className="text-right font-medium">
-            {totalGross != null ? `${totalGross} gm` : '—'}
+            {totalGross != null ? `${formatWeight(totalGross)} gm` : '—'}
           </dd>
           <dt className="text-muted-foreground">Less weight</dt>
           <dd className="text-right font-medium">
-            {totalLess != null ? `${totalLess} gm` : '—'}
+            {totalLess != null ? `${formatWeight(totalLess)} gm` : '—'}
           </dd>
           <dt className="mt-1 border-t pt-1.5 font-medium">Total net weight</dt>
           <dd className="mt-1 border-t pt-1.5 text-right font-heading font-semibold">
-            {totalNet != null ? `${totalNet} gm` : '—'}
+            {totalNet != null ? `${formatWeight(totalNet)} gm` : '—'}
           </dd>
           <dd className="col-span-2 text-right text-xs text-muted-foreground">
             for {qty} {qty === 1 ? 'piece' : 'pieces'}
