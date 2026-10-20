@@ -55,7 +55,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
     customerTypes.find((t) => t.name === 'Public')?.id ?? customerTypes[0]?.id ?? ''
   )
   const [typeId, setTypeId] = useState(defaultTypeId)
-  const [session, setSession] = useState<SessionDuration>('1d')
+  const [session, setSession] = useState<SessionDuration>('never')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
@@ -86,7 +86,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer, customerTypes
     } else {
       reset(EMPTY)
       setTypeId(defaultTypeId)
-      setSession('1d')
+      setSession('never')
     }
   }, [open, customer, defaultTypeId, reset])
 
