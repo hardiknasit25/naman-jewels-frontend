@@ -21,7 +21,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { formatWeight, round3, toWeightInput } from '@/lib/format'
+import { formatDate, formatWeight, round3, toWeightInput } from '@/lib/format'
+import { TagInput } from '@/components/shared/TagInput'
 import { fileToDataUrl } from '@/lib/cropImage'
 import { resolveImageUrl } from '@/lib/imageUrl'
 import {
@@ -233,6 +234,13 @@ export function ProductFormPage() {
   const [images, setImages] = useState<string[]>([])
   const [status, setStatus] = useState<ProductStatus>('live')
   const [customerTypeIds, setCustomerTypeIds] = useState<Id[]>([])
+  const [tags, setTags] = useState<string[]>([])
+  // Every tag already on some product, offered while typing so the same label
+  // isn't spelled three different ways.
+  const tagSuggestions = useMemo(
+    () => [...new Set((products ?? []).flatMap((p) => p.tags ?? []))].sort((a, b) => a.localeCompare(b)),
+    [products]
+  )
   // Name of the selected category — the fallback for an empty product name, so a
   // piece is never saved untitled.
   const categoryLabel = useMemo(
@@ -415,6 +423,7 @@ export function ProductFormPage() {
       setImages(record.images?.length ? record.images : record.imageUrl ? [record.imageUrl] : [])
       setStatus(record.status ?? 'live')
       setCustomerTypeIds(record.customerTypeIds ?? [])
+      setTags(record.tags ?? [])
       const storedFactors = (record.lessFactors ?? []).map((r) => ({
         label: r.label ?? '',
         weight: formatWeight(Number(r.weight)),
@@ -438,6 +447,7 @@ export function ProductFormPage() {
       setStatus('live')
       // No tags = visible to every tier, which matches the "Public" default.
       setCustomerTypeIds([])
+      setTags([])
       // No rows by default — less factors are optional; the admin adds one via
       // "Add factor" only if the piece actually has a deduction.
       setLessFactors([])
@@ -558,6 +568,7 @@ export function ProductFormPage() {
       imageUrl: images[0] ?? '',
       status,
       customerTypeIds,
+      tags,
     }
     try {
       if (isEdit && record) {
@@ -954,8 +965,22 @@ export function ProductFormPage() {
                   <Input id="p-stone" placeholder="Type, weight/carat, quantity" {...register('stoneDetails')} />
                 </Field>
               </div>
-              <Field label="Other Notes / Tags" htmlFor="p-notes" optional>
+              <Field label="Other Notes" htmlFor="p-notes" optional>
                 <Input id="p-notes" {...register('notes')} />
+              </Field>
+              <Field
+                label="Tags"
+                htmlFor="p-tags"
+                optional
+                hint="For filtering the product list in the admin panel. Type a tag and press Enter. Not shown in the customer app."
+              >
+                <TagInput
+                  id="p-tags"
+                  value={tags}
+                  onChange={setTags}
+                  suggestions={tagSuggestions}
+                  placeholder="e.g. Bridal, Lightweight"
+                />
               </Field>
             </Section>
 
@@ -964,9 +989,11 @@ export function ProductFormPage() {
                 <Field
                   label="Status"
                   hint={
-                    status === 'private'
-                      ? 'Hidden from the customer app'
-                      : 'Published to the customer app'
+                    record?.soldAt && status === 'private'
+                      ? `Sold on ${formatDate(record.soldAt)} (from the desktop software). Set it Live to put it back on sale.`
+                      : status === 'private'
+                        ? 'Hidden from the customer app'
+                        : 'Published to the customer app'
                   }
                 >
                   <SelectField

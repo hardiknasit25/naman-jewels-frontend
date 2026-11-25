@@ -212,20 +212,26 @@ interface OptionsFilterParams {
   anyLabel?: string
 }
 
-/** Row passes when its value is one of the ticked options. */
+/**
+ * Row passes when its value is one of the ticked options. A column whose value
+ * is a list (a product's tags) passes when ANY of its entries is ticked.
+ */
 function useOptionsFilter(
   model: OptionsFilterModel | null,
   getValue: (node: IRowNode) => unknown
 ) {
-  const cellText = useCellText(getValue)
+  const read = useRef(getValue)
+  read.current = getValue
   // Stable predicate reading a ref, for the reason spelled out on useTextFilter.
   const values = useRef<string[]>([])
   values.current = model?.values ?? []
 
-  return useRef(
-    ({ node }: IDoesFilterPassParams) =>
-      values.current.length === 0 || values.current.includes(cellText(node))
-  ).current
+  return useRef(({ node }: IDoesFilterPassParams) => {
+    if (values.current.length === 0) return true
+    const value = read.current(node)
+    const texts = Array.isArray(value) ? value.map(textOf) : [textOf(value)]
+    return texts.some((t) => values.current.includes(t))
+  }).current
 }
 
 /** Popup filter for columns backed by a master list or a status enum. */

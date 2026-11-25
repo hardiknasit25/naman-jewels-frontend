@@ -68,6 +68,13 @@ export function ProductsPage() {
         .map((c) => ({ value: c.name, label: c.name })),
     [carats]
   )
+  // Tags have no master table — the options are every tag in use, A→Z.
+  const tagFilterOptions = useMemo(() => {
+    const tags = new Set((products ?? []).flatMap((p) => p.tags ?? []))
+    return [...tags]
+      .sort((a, b) => a.localeCompare(b))
+      .map((t) => ({ value: t, label: t, node: <Badge variant="outline">{t}</Badge> }))
+  }, [products])
 
   // Which customer types can actually see a given product, as a readable list.
   const audienceNames = useMemo(
@@ -125,7 +132,9 @@ export function ProductsPage() {
         headerName: 'Status',
         colId: 'status',
         maxWidth: 120,
-        valueGetter: (p) => p.data?.status ?? 'live',
+        // Sold (reported by the desktop software) outranks the stored status: a
+        // sold piece is private, but "Sold" is the reason worth showing.
+        valueGetter: (p) => (p.data?.soldAt ? 'sold' : p.data?.status ?? 'live'),
         ...optionsFilter<Product>(
           [
             { value: 'live', label: 'Live', node: <Badge variant="secondary">Live</Badge> },
@@ -138,15 +147,35 @@ export function ProductsPage() {
                 </Badge>
               ),
             },
+            { value: 'sold', label: 'Sold', node: <Badge variant="destructive">Sold</Badge> },
           ],
           'All statuses'
         ),
         cellRenderer: (p: { value: string }) =>
-          p.value === 'private' ? (
+          p.value === 'sold' ? (
+            <Badge variant="destructive">Sold</Badge>
+          ) : p.value === 'private' ? (
             <Badge variant="outline" className="text-muted-foreground">Private</Badge>
           ) : (
             <Badge variant="secondary">Live</Badge>
           ),
+      },
+      {
+        headerName: 'Tags',
+        colId: 'tags',
+        minWidth: 160,
+        valueGetter: (p) => p.data?.tags ?? [],
+        cellRenderer: (p: { value: string[] }) =>
+          p.value.length ? (
+            <div className="flex h-full items-center gap-1 overflow-hidden">
+              {p.value.map((t) => (
+                <Badge key={t} variant="outline">{t}</Badge>
+              ))}
+            </div>
+          ) : (
+            '—'
+          ),
+        ...optionsFilter<Product>(tagFilterOptions, 'All tags'),
       },
       {
         headerName: 'Visible To',
@@ -210,7 +239,7 @@ export function ProductsPage() {
         ),
       },
     ],
-    [categoryName, caratName, audienceNames, categoryFilterOptions, caratFilterOptions, navigate]
+    [categoryName, caratName, audienceNames, categoryFilterOptions, caratFilterOptions, tagFilterOptions, navigate]
   )
 
   return (

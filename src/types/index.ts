@@ -126,6 +126,10 @@ export interface Product extends Timestamped {
    * the lowest tier reaches every customer. Empty/undefined = visible to all tiers.
    */
   customerTypeIds?: Id[]
+  /** Admin-only labels ("Bridal", "Lightweight", …) the product list filters by. */
+  tags?: string[] | null
+  /** Set when the desktop software reported the piece sold; it's then private. */
+  soldAt?: string | null
 }
 
 // 4.8 App Content Management — home hero banners / images.
